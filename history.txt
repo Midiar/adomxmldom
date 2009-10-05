@@ -1,0 +1,14 @@
+
+Wrapper for XDOM 3.1 through IXmlDocument.
+Copyright (c) GITEK AS, www.gitek.no
+
+20050415:
+Made Tox31DOMXPathNamespace.get_namespaceURI overridden.
+Ran against XDOM 3.1.17, with some unit tests involving the
+wrapper.
+
+20041101:
+Finished for Delphi 6.
+
+-------
+
