@@ -3,7 +3,11 @@
  Author:    Tor Helland (reworked from Borland's 2.4 wrapper, which also had
             contributions from Keith Wood)
  Purpose:   IDom... interface wrapper for OpenXml Xdom v4
- History:   20080815 th The document element's Tox4DomElement._AddRef/_Release now
+ History:   20080910 th Avoiding error when doing xpath on tree with
+                        PreserveWhitespace in effect.
+            20080902 th SelectNode and SelectNodes now return literal xpath query
+                        results (boolean, number, string) as TDomText/IDomText/IXmlNode.
+            20080815 th The document element's Tox4DomElement._AddRef/_Release now
                         also access the document's _AddRef/_Release. This is to avoid
                         RefCount trouble when using IDomNodeSelect.
                         Added license text for MPL 1.1.
@@ -81,7 +85,11 @@ uses Classes,
 {$IFEND}
 
 const
+  {$ifdef UseXdomV4}
   sXdom4XmlVendor = 'Open XML v4';                    { Do not localize }
+  {$else}
+  sXdom4XmlVendor = 'Open XML v3';                    { Do not localize }
+  {$endif}
 
 type
 
@@ -166,6 +174,7 @@ type
     FChildNodes: IDOMNodeList;
     FAttributes: IDOMNamedNodeMap;
     FOwnerDocument: IDOMDocument;
+    FOwnAndLaterFreeNativeNode: Boolean;
   protected
     function AllocParser: TDomToXmlParser; // Must be freed by calling routine.
 
@@ -553,6 +562,8 @@ uses
   Windows
 {$ENDIF};
 
+type
+  THackXPathExpression = class(TXPathExpression);
 var
   GlobalOx4DOM: Tox4DOMImplementation;
 
@@ -634,7 +645,8 @@ begin
   Result := (Node as Iox4DOMNodeRef).GetNativeNode;
 end;
 
-function MakeNode(NativeNode: TdomNode; WrapperDocument: Tox4DOMDocument): IDOMNode;
+function MakeNode(NativeNode: TdomNode; WrapperDocument: Tox4DOMDocument;
+  bOwnAndLaterFreeNativeNode: Boolean = False): IDOMNode;
 var
   dnWrapper: Tox4DOMNode;
 begin
@@ -642,7 +654,7 @@ begin
     Result := nil
 
   else begin
-    // Possible change for later, having av pointer to the wrapper node:
+    // Possible change for later, having a pointer to the wrapper node:
     // dnWrapper := Tox4DomNode(NativeNode.GetUserData('WrapperNode'));
     // if Assigned(dnWrapper) then
     //   Result := dnWrapper
@@ -666,6 +678,7 @@ begin
       ntXPath_Namespace_Node: dnWrapper := Tox4DOMXPathNamespace.Create(NativeNode, WrapperDocument);
     end;
 
+    dnWrapper.FOwnAndLaterFreeNativeNode := bOwnAndLaterFreeNativeNode;
     Result := dnWrapper;
   end;
 end;
@@ -916,6 +929,9 @@ begin
     docTemp.Free;
   end;
 
+  // In order to prevent dangling pointer when doing XPath "/" on a PreserveWhitespace document.
+  WrapperDoc.get_documentElement;
+
   if not WrapperDoc.PreserveWhitespace then
     WrapperDoc.RemoveWhiteSpaceNodes;
 end;
@@ -964,6 +980,9 @@ begin
   finally
     docTemp.Free;
   end;
+
+  // In order to prevent dangling pointer when doing XPath "/" on a PreserveWhitespace document.
+  WrapperDoc.get_documentElement;
 
   if not WrapperDoc.PreserveWhitespace then
     WrapperDoc.RemoveWhiteSpaceNodes;
@@ -1023,11 +1042,17 @@ begin
   FNativeNode := ANativeNode;
   FWrapperDocument := AWrapperDocument;
   inherited Create;
+
+  FOwnAndLaterFreeNativeNode := False;
 end;
 
 destructor Tox4DOMNode.Destroy;
 begin
   inherited;
+
+  if FOwnAndLaterFreeNativeNode then
+    FNativeNode.Free;
+
   FNativeNode := nil;
   FWrapperDocument := nil;
 end;
@@ -1192,6 +1217,7 @@ end;
 function Tox4DOMNode.selectNode(const nodePath: WideString): IDOMNode;
 var
   xpath: TXpathExpression;
+  xdomText: TDomText;
 begin
   Result := nil;
   if not Assigned(WrapperDocument) or not Assigned(WrapperDocument.WrapperDOMImpl) then
@@ -1206,8 +1232,22 @@ begin
   AddContextNode(self);
   try
 
-    if xpath.evaluate and xpath.hasNodeSetResult then
-      Result := MakeNode(xpath.resultNode(0), WrapperDocument);
+    if xpath.evaluate then
+    begin
+      if xpath.hasNodeSetResult then
+        // Nodeset.
+        Result := MakeNode(xpath.resultNode(0), WrapperDocument)
+      else if THackXPathExpression(xpath).FXPathResult is TDomXPathNodeSetResult then
+        // Nodeset, and no nodes.
+        Result := nil
+      else
+      begin
+        // Boolean, number, or string value.
+        xdomText := TDomText.Create(nil);
+        xdomText.Data := xpath.ResultAsWideString;
+        Result := MakeNode(xdomText, nil, True);
+      end;
+    end;
 
   finally
     RemoveContextNode(self);
@@ -1231,7 +1271,7 @@ begin
   AddContextNode(self);
   try
 
-    if xpath.evaluate and xpath.hasNodeSetResult then
+    if xpath.evaluate then
       Result := MakeNodeList(xpath, WrapperDocument);
 
   finally
@@ -1307,7 +1347,14 @@ constructor Tox4DOMNodeList.Create(AnXpath: TXpathExpression;
   AWrapperOwnerNode: Tox4DOMNode);
 begin
   FNativeNodeList := nil;
-  FNativeXpathNodeSet := AnXpath.acquireXPathResult(TdomXPathNodeSetResult);
+
+  if THackXPathExpression(AnXpath).FXPathResult.ResultType = XPATH_NODE_SET_TYPE then
+    // Nodeset, but maybe empty.
+    FNativeXpathNodeSet := AnXpath.acquireXPathResult(TdomXPathNodeSetResult)
+  else
+    // Boolean, number or string;
+    FNativeXpathNodeSet := AnXpath.acquireXPathResult(TDomXPathStringResult);
+
   FWrapperOwnerNode := AWrapperOwnerNode;
 end;
 
@@ -1318,19 +1365,41 @@ begin
 end;
 
 function Tox4DOMNodeList.get_item(index: Integer): IDOMNode;
+var
+  xdomText: TDomText;
 begin
   if Assigned(NativeNodeList) then
     Result := MakeNode(NativeNodeList.Item(index), FWrapperOwnerNode.WrapperDocument)
+  else if Assigned(FNativeXpathNodeSet) then
+  begin
+    if FNativeXpathNodeSet.ResultType = XPATH_NODE_SET_TYPE then
+      Result := MakeNode(FNativeXpathNodeSet.item(index), FWrapperOwnerNode.WrapperDocument)
+    else
+    begin
+      // Single value (number/boolean/string)
+      xdomText := TDomText.Create(nil);
+      xdomText.Data := FNativeXpathNodeSet.AsWideString;
+      Result := MakeNode(xdomText, nil, True);
+    end;
+  end
   else
-    Result := MakeNode(FNativeXpathNodeSet.item(index), FWrapperOwnerNode.WrapperDocument);
+    Result := nil;
 end;
 
 function Tox4DOMNodeList.get_length: Integer;
 begin
   if Assigned(NativeNodeList) then
     Result := NativeNodeList.Length
+  else if Assigned(FNativeXpathNodeSet) then
+  begin
+    if FNativeXpathNodeSet.ResultType = XPATH_NODE_SET_TYPE then
+      Result := FNativeXpathNodeSet.length
+    else
+      // Single value (number/boolean/string)
+      Result := 1;
+  end
   else
-    Result := FNativeXpathNodeSet.length;
+    Result := 0;
 end;
 
 { Tox4DOMNamedNodeMap }
@@ -1593,7 +1662,8 @@ function Tox4DOMElement._AddRef: Integer;
 begin
   Result := inherited _AddRef;
   if Assigned(NativeNode) and Assigned(NativeNode.RootDocument)
-    and (NativeNode = NativeNode.RootDocument.DocumentElement) then
+    and (NativeNode = NativeNode.RootDocument.DocumentElement)
+    and Assigned(self.WrapperDocument) then
     self.WrapperDocument._AddRef;
 end;
 
@@ -1601,7 +1671,8 @@ function Tox4DOMElement._Release: Integer;
 begin
   Result := inherited _Release;
   if Assigned(NativeNode) and Assigned(NativeNode.RootDocument)
-    and (NativeNode = NativeNode.RootDocument.DocumentElement) then
+    and (NativeNode = NativeNode.RootDocument.DocumentElement)
+    and Assigned(self.WrapperDocument) then
     self.WrapperDocument._Release;
 end;
 
