@@ -1,4 +1,4 @@
-package gtcXdom32DomIntfD2006;
+package gtcXdomDomIntfD2009;
 
 {$R *.res}
 {$ALIGN 8}
@@ -22,19 +22,18 @@ package gtcXdom32DomIntfD2006;
 {$WRITEABLECONST OFF}
 {$MINENUMSIZE 1}
 {$IMAGEBASE $400000}
-{$DESCRIPTION 'Gitek IDom interface wrapper for OpenXML XDOM 3.2'}
-{$IMPLICITBUILD ON}
-{$DEFINE EUREKALOG}
+{$DESCRIPTION 'Gitek IDom interface wrapper for OpenXML XDOM v4'}
+{$IMPLICITBUILD OFF}
 
 requires
   rtl,
   vcl,
   xmlrtl,
-  Xdom_3_2Delphi2006,
-  Utilities_D2006;
+  Xdom_4_1Delphi2009,
+  Utilities_D2009;
 
 contains
-  gtcXdom32DomUnit in 'gtcXdom32DomUnit.pas';
+  gtcXdomDomUnit in 'gtcXdomDomUnit.pas';
 
 end.
 
