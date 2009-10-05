@@ -1,6 +1,11 @@
 
-Wrapper for XDOM 3.1 through IXmlDocument.
+Wrapper for XDOM 3.2 through IXmlDocument.
 Copyright (c) GITEK AS, www.gitek.no
+
+20060707
+Using Thomas Mueller's tweaking for Xdom 3.2 and D2006.
+Renamed the files to reflect Xdom 3.2, and to get different
+packages for D6 and D2006 (had only D6 package before).
 
 20051120:
 Added OnOx31XPathLookupNamespaceURI, allowing processing of

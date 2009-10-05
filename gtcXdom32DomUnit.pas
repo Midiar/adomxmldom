@@ -1,8 +1,12 @@
 {-----------------------------------------------------------------------------
  Unit Name: gtcXdom31DomUnit
- Author:    Tor Helland
+ Author:    Tor Helland (reworked from Borland's 2.4 wrapper)
  Purpose:   IDom... interface wrapper for OpenXml Xdom 3.1
- History:   20051004 th Simply replaced all TdomDocumentType with TdomDocumentTypeDecl.
+ History:   20060707 th Using Thomas Mueller's tweaking for Xdom 3.2 and D2006.
+                        Renaming for Xdom 3.2, and package for both D6 and D2006.
+            20051120 th Support for OnLookupNamespaceURI, giving the context node
+                        back as a parameter in our wrapper event.
+            20051004 th Simply replaced all TdomDocumentType with TdomDocumentTypeDecl.
                         ntDocument_Type_Decl_Node now gives a Tox31DOMDocumentType.
                         Removed Tox31DOMNotation and Tox31DOMEntity.
                         Setting Tox31DOMDocument.FDocIsOwned to True.
@@ -14,22 +18,28 @@
                         Returns dummy Tox31DOMDocumentType.get_entities.
                         Returns dummy Tox31DOMDocumentType.get_notations.
 -----------------------------------------------------------------------------}
-unit gtcXdom31DomUnit;
+unit gtcXdom32DomUnit;
 
 interface
 uses Classes,
   Variants,
+  ActiveX,
   SysUtils,
   ComObj,
   xmldom,
-  Xdom_3_1;
+  Xdom_3_2;
+
+{$IF DOMWrapperVersion > 1.0}
+// Testing for the version of xmldom.pas (safecalls on interfaces).
+{$DEFINE WRAPVER1.1}
+{$IFEND}
 
 const
-  sXdom31Xml = 'Open XML 3.1';                    { Do not localize }
+  sXdom32Xml = 'Open XML 3.2';                    { Do not localize }
 
 type
 
-{ IOXDOMNodeRef }
+{ Iox31DOMNodeRef }
 
   Iox31DOMNodeRef = interface
     ['{4D898FD5-1F65-44E9-9E27-A28026311F94}']
@@ -485,12 +495,11 @@ uses
 {$IFDEF LINUX}
   Types,
   IdHttp,
-  UrlMon,
+  UrlMon
 {$ENDIF}
 {$IFDEF MSWINDOWS}
-  Windows,
-  ActiveX;
-{$ENDIF}
+  Windows
+{$ENDIF};
 
 var
   GlobalOx31DOM: Tox31DOMImplementation;
@@ -1156,13 +1165,13 @@ end;
 procedure Tox31DOMNode.transformNode(const stylesheet: IDOMNode;
   var output: WideString);
 begin
-  DOMVendorNotSupported('transformNode', sXdom31Xml); { Do not localize }
+  DOMVendorNotSupported('transformNode', sXdom32Xml); { Do not localize }
 end;
 
 procedure Tox31DOMNode.transformNode(const stylesheet: IDOMNode;
   const output: IDOMDocument);
 begin
-  DOMVendorNotSupported('transformNode', sXdom31Xml); { Do not localize }
+  DOMVendorNotSupported('transformNode', sXdom32Xml); { Do not localize }
 end;
 
 { Tox31DOMNodeList }
@@ -1830,7 +1839,7 @@ end;
 procedure Tox31DOMDocument.set_async(Value: Boolean);
 begin
   if Value then
-    DOMVendorNotSupported('set_async(True)', sXdom31Xml); { Do not localize }
+    DOMVendorNotSupported('set_async(True)', sXdom32Xml); { Do not localize }
 end;
 
 procedure Tox31DOMDocument.set_preserveWhiteSpace(Value: Boolean);
@@ -1841,13 +1850,13 @@ end;
 procedure Tox31DOMDocument.set_resolveExternals(Value: Boolean);
 begin
   if Value then
-    DOMVendorNotSupported('set_resolveExternals(True)', sXdom31Xml); { Do not localize }
+    DOMVendorNotSupported('set_resolveExternals(True)', sXdom32Xml); { Do not localize }
 end;
 
 procedure Tox31DOMDocument.set_validate(Value: Boolean);
 begin
   if Value then
-    DOMVendorNotSupported('set_validate(True)', sXdom31Xml); { Do not localize }
+    DOMVendorNotSupported('set_validate(True)', sXdom32Xml); { Do not localize }
 end;
 
 { IDOMPersist interface }
@@ -1952,7 +1961,7 @@ begin
     end;
   end
   else
-    DOMVendorNotSupported('load(object)', sXdom31Xml); { Do Not Localize }
+    DOMVendorNotSupported('load(object)', sXdom32Xml); { Do Not Localize }
 end;
 
 function Tox31DOMDocument.loadxml(const Value: DOMString): WordBool;
@@ -1979,7 +1988,7 @@ begin
     end;
   end
   else
-    DOMVendorNotSupported('save(object)', sXdom31Xml); { Do Not Localize }
+    DOMVendorNotSupported('save(object)', sXdom32Xml); { Do Not Localize }
 end;
 
 procedure Tox31DOMDocument.saveToStream(const stream: TStream);
@@ -2072,7 +2081,7 @@ end;
 procedure Tox31DOMDocument.set_OnAsyncLoad(const Sender: TObject;
   EventHandler: TAsyncEventHandler);
 begin
-  DOMVendorNotSupported('set_OnAsyncLoad', sXdom31Xml); { Do Not Localize }
+  DOMVendorNotSupported('set_OnAsyncLoad', sXdom32Xml); { Do Not Localize }
 end;
 
 { IDOMXMLProlog }
@@ -2164,7 +2173,7 @@ end;
 
 function Tox31DOMImplementationFactory.Description: String;
 begin
-  Result := sXdom31Xml;
+  Result := sXdom32Xml;
 end;
 
 initialization
