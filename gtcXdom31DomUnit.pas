@@ -77,6 +77,10 @@ type
       systemId: DOMString): IDOMDocumentType; safecall;
     function createDocument(const namespaceURI, qualifiedName: DOMString;
       doctype: IDOMDocumentType): IDOMDocument; safecall;
+
+    // XPath NS event.
+    procedure xpathLookupNamespaceURI(const Sender: TXPathExpression;
+      const APrefix: WideString; var ANamespaceURI: WideString);
   public
     constructor Create;
     destructor Destroy; override;
@@ -464,17 +468,24 @@ type
     function Description: String; override;
   end;
 
+  // OnLookupNamespaceURI
+  Tox31OnXPathLookupNamespaceURI = procedure (const AContextNode: IDomNode;
+    const APrefix: WideString; var ANamespaceURI: WideString) of object;
+
 var
   OpenXML31Factory: Tox31DOMImplementationFactory;
+
+  OnOx31XPathLookupNamespaceURI: Tox31OnXPathLookupNamespaceURI = nil;
 
 implementation
 
 uses
   TypInfo,
+  SyncObjs,
 {$IFDEF LINUX}
   Types,
   IdHttp,
-  UrlMon;
+  UrlMon,
 {$ENDIF}
 {$IFDEF MSWINDOWS}
   Windows,
@@ -493,6 +504,65 @@ resourcestring
   SNotImplemented =
     'This property or method is not implemented in the Open XML Parser';
 
+// List of XPath context nodes, for OnLookupNamespaceURI.
+
+var
+  lstContextNodes: TList;
+  criContextNodes: TCriticalSection;
+
+procedure AddContextNode(WrapperNode: Tox31DOMNode);
+begin
+  criContextNodes.Enter;
+  try
+    lstContextNodes.Add(WrapperNode);
+  finally
+    criContextNodes.Leave;
+  end;
+end;
+
+function FindContextNode(dnNative: TdomNode): Tox31DOMNode;
+var
+  i: Integer;
+begin
+  criContextNodes.Enter;
+  try
+
+    for i := 0 to lstContextNodes.Count - 1 do
+    begin
+      Result := Tox31DOMNode(lstContextNodes[i]);
+      if Result.NativeNode = dnNative then
+        Exit;
+    end;
+
+    // Found nothing.
+    Result := nil;
+
+  finally
+    criContextNodes.Leave;
+  end;
+end;
+
+procedure InitContextNodes;
+begin
+  lstContextNodes := TList.Create;
+  criContextNodes := TCriticalSection.Create;
+end;
+
+procedure RemoveContextNode(WrapperNode: Tox31DOMNode);
+begin
+  criContextNodes.Enter;
+  try
+    lstContextNodes.Remove(WrapperNode);
+  finally
+    criContextNodes.Leave;
+  end;
+end;
+
+procedure TakeDownContextNodes;
+begin
+  FreeAndNil(lstContextNodes);
+  FreeAndNil(criContextNodes);
+end;
 
 { Utility Functions }
 
@@ -653,7 +723,14 @@ end;
 destructor Tox31DOMImplementation.Destroy;
 begin
   inherited;
-//  FreeAndNil(FXMLAgent);
+
+  FParser.Free;
+  FBuilder.Free;
+  FReader.Free;
+  FNSGen.Free;
+  FXpath.Free;
+
+  FNativeDOMImpl.Free;
 end;
 
 procedure Tox31DOMImplementation.FreeDocument(var Doc: TdomDocument);
@@ -702,6 +779,9 @@ begin
 
     // Error handling.
     FReader.OnError := ParseErrorHandler;
+
+    // XPath namespace handling.
+    FXpath.OnLookupNamespaceURI := xpathLookupNamespaceURI;
   end;
 end;
 
@@ -793,6 +873,23 @@ begin
       filePos := error.StartByteNumber;
       url := error.Uri;
     end;
+end;
+
+procedure Tox31DOMImplementation.xpathLookupNamespaceURI(
+  const Sender: TXPathExpression; const APrefix: WideString;
+  var ANamespaceURI: WideString);
+var
+  dnWrapper: Tox31DOMNode;
+  dnIntf: IDomNode;
+begin
+  dnWrapper := FindContextNode(Sender.ContextNode);
+  if Assigned(dnWrapper) then
+    dnIntf := dnWrapper
+  else
+    dnIntf := nil;
+
+  if Assigned(OnOx31XPathLookupNamespaceURI) then
+    OnOx31XPathLookupNamespaceURI(dnIntf, APrefix, ANamespaceURI);
 end;
 
 { Tox31DOMNode }
@@ -989,8 +1086,16 @@ begin
   xpath.ContextNode := NativeNode;
   xpath.Expression := nodePath;
 
-  if xpath.evaluate and xpath.hasNodeSetResult then
-    Result := MakeNode(xpath.resultNode(0), WrapperDocument);
+  // Storing the context node for OnLookupNamespaceURI.
+  AddContextNode(self);
+  try
+
+    if xpath.evaluate and xpath.hasNodeSetResult then
+      Result := MakeNode(xpath.resultNode(0), WrapperDocument);
+
+  finally
+    RemoveContextNode(self);
+  end;
 end;
 
 function Tox31DOMNode.selectNodes(const nodePath: WideString): IDOMNodeList;
@@ -2063,6 +2168,8 @@ begin
 end;
 
 initialization
+  InitContextNodes;
+
   OpenXML31Factory := Tox31DOMImplementationFactory.Create;
   RegisterDOMVendor(OpenXML31Factory);
 finalization
@@ -2073,4 +2180,6 @@ finalization
 {$ENDIF}
   UnRegisterDOMVendor(OpenXML31Factory);
   OpenXML31Factory.Free;
+
+  TakeDownContextNodes;
 end.
