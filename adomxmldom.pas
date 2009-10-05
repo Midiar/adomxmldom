@@ -3,7 +3,9 @@
  Author:    Tor Helland (reworked from Borland's 2.4 wrapper, which also had
             contributions from Keith Wood)
  Purpose:   IDom... interface wrapper for ADOM 4.3 (formerly OpenXML)
- History:   20090727 me Update to work with ADOM 4.3
+ History:   20090809 th Fixed some serious flaws in selectNode/selectNodes (now
+                        makes a copy of the nodes returned from TXpathExpression).
+            20090727 me Update to work with ADOM 4.3. Renamed to adomxmldom.
             20080910 th Avoiding error when doing xpath on tree with
                         PreserveWhitespace in effect.
             20080902 th SelectNode and SelectNodes now return literal xpath query
@@ -87,9 +89,9 @@ uses Classes,
 
 const
   {$ifdef UseADomV4_3}
-  sXdom4XmlVendor = 'ADOM XML v4';                    { Do not localize }
+  sAdom4XmlVendor = 'ADOM XML v4';                    { Do not localize }
   {$else}
-  sXdom4XmlVendor = 'Open XML v3';                    { Do not localize }
+  sAdom4XmlVendor = 'Open XML v3';                    { Do not localize }
   {$endif}
 
 type
@@ -176,8 +178,9 @@ type
     FAttributes: IDOMNamedNodeMap;
     FOwnerDocument: IDOMDocument;
     FOwnAndLaterFreeNativeNode: Boolean;
+    FXpathNodeListCopy: IDomNodeList;
   protected
-    function AllocParser: TDomToXmlParser; // Must be freed by calling routine.
+    function AllocParser: TDomToXmlParser; // Must be freed by the calling routine.
 
     { Iox4DOMNodeRef }
     function GetNativeNode: TdomNode;
@@ -780,6 +783,13 @@ end;
 constructor Tox4DOMImplementation.Create;
 begin
   inherited;
+  FParser            := nil;
+  FBuilder           := nil;
+  FReader            := nil;
+  FNSGen             := nil;
+  FXpath             := nil;
+  FParseError        := nil;
+
   FNativeDOMImpl := TDomImplementation.Create(nil);
   // Error handling.
   FNativeDOMImpl.OnError := ParseErrorHandler;
@@ -818,14 +828,11 @@ var
   domDocType: TdomDocumentTypeDecl;
 begin
   domDocType := TdomDocumentTypeDecl.Create(nil, qualifiedName, publicId, systemId, '');
-  //NativeDOMImpl.createDocumentType(qualifiedName, publicId, systemId);
   Result := Tox4DOMDocumentType.Create(domDocType, nil);
 end;
 
 destructor Tox4DOMImplementation.Destroy;
 begin
-  inherited;
-
   FParser.Free;
   FBuilder.Free;
   FReader.Free;
@@ -833,6 +840,8 @@ begin
   FXpath.Free;
 
   FNativeDOMImpl.Free;
+
+  inherited;
 end;
 
 procedure Tox4DOMImplementation.FreeDocument(var Doc: TdomDocument);
@@ -847,7 +856,7 @@ end;
 
 function Tox4DOMImplementation.hasFeature(const feature, version: DOMString): WordBool;
 begin
-  // No longer supported in Xdom.
+  // No longer supported in Adom.
   Result := False;
 end;
 
@@ -1050,7 +1059,7 @@ begin
   Result := TDomToXmlParser.create(nil);
   Result.DOMImpl := WrapperDocument.WrapperDomImpl.NativeDomImpl;
 
-  // Must be freed by calling routine.
+  // Must be freed by the calling routine.
 end;
 
 constructor Tox4DOMNode.Create(ANativeNode: TdomNode; AWrapperDocument: Tox4DOMDocument);
@@ -1060,17 +1069,19 @@ begin
   inherited Create;
 
   FOwnAndLaterFreeNativeNode := False;
+  FXpathNodeListCopy := nil;
 end;
 
 destructor Tox4DOMNode.Destroy;
 begin
-  inherited;
-
   if FOwnAndLaterFreeNativeNode then
     FNativeNode.Free;
+  FXpathNodeListCopy := nil;
 
   FNativeNode := nil;
   FWrapperDocument := nil;
+
+  inherited;
 end;
 
 function Tox4DOMNode.appendChild(const newChild: IDOMNode): IDOMNode;
@@ -1251,8 +1262,11 @@ begin
     if xpath.evaluate then
     begin
       if xpath.hasNodeSetResult then
+      begin
         // Nodeset.
-        Result := MakeNode(xpath.resultNode(0), WrapperDocument)
+        FXpathNodeListCopy := MakeNodeList(xpath, WrapperDocument);
+        Result := FXpathNodeListCopy[0];
+      end
       else if THackXPathExpression(xpath).FXPathResult is TDomXPathNodeSetResult then
         // Nodeset, and no nodes.
         Result := nil
@@ -1339,13 +1353,13 @@ end;
 procedure Tox4DOMNode.transformNode(const stylesheet: IDOMNode;
   var output: WideString);
 begin
-  DOMVendorNotSupported('transformNode', sXdom4XmlVendor); { Do not localize }
+  DOMVendorNotSupported('transformNode', sAdom4XmlVendor); { Do not localize }
 end;
 
 procedure Tox4DOMNode.transformNode(const stylesheet: IDOMNode;
   const output: IDOMDocument);
 begin
-  DOMVendorNotSupported('transformNode', sXdom4XmlVendor); { Do not localize }
+  DOMVendorNotSupported('transformNode', sAdom4XmlVendor); { Do not localize }
 end;
 
 { Tox4DOMNodeList }
@@ -1365,7 +1379,15 @@ begin
   FNativeNodeList := nil;
 
 {$ifdef UseADomV4_3}
-  FNativeXpathNodeSet := THackXPathExpression(AnXpath).FXPathResult;
+  if THackXPathExpression(AnXpath).FXPathResult.ResultType = XPATH_NODE_SET_TYPE then
+  begin
+    // Nodeset, but maybe empty.
+    FNativeXpathNodeSet := TDomXPathNodeSetResult.Create;
+    FNativeXpathNodeSet.Assign(THackXPathExpression(AnXpath).FXPathResult);
+  end
+  else
+    // Boolean, number or string;
+    FNativeXpathNodeSet := TDomXPathStringResult.Create(AnXpath.ResultAsWideString);
 {$else}
   if THackXPathExpression(AnXpath).FXPathResult.ResultType = XPATH_NODE_SET_TYPE then
     // Nodeset, but maybe empty.
@@ -2063,7 +2085,7 @@ end;
 procedure Tox4DOMDocument.set_async(Value: Boolean);
 begin
   if Value then
-    DOMVendorNotSupported('set_async(True)', sXdom4XmlVendor); { Do not localize }
+    DOMVendorNotSupported('set_async(True)', sAdom4XmlVendor); { Do not localize }
 end;
 
 procedure Tox4DOMDocument.set_preserveWhiteSpace(Value: Boolean);
@@ -2074,13 +2096,13 @@ end;
 procedure Tox4DOMDocument.set_resolveExternals(Value: Boolean);
 begin
   if Value then
-    DOMVendorNotSupported('set_resolveExternals(True)', sXdom4XmlVendor); { Do not localize }
+    DOMVendorNotSupported('set_resolveExternals(True)', sAdom4XmlVendor); { Do not localize }
 end;
 
 procedure Tox4DOMDocument.set_validate(Value: Boolean);
 begin
   if Value then
-    DOMVendorNotSupported('set_validate(True)', sXdom4XmlVendor); { Do not localize }
+    DOMVendorNotSupported('set_validate(True)', sAdom4XmlVendor); { Do not localize }
 end;
 
 { IDOMPersist interface }
@@ -2192,7 +2214,7 @@ begin
     end;
   end
   else
-    DOMVendorNotSupported('load(object)', sXdom4XmlVendor); { Do Not Localize }
+    DOMVendorNotSupported('load(object)', sAdom4XmlVendor); { Do Not Localize }
 end;
 
 function Tox4DOMDocument.loadxml(const Value: DOMString): WordBool;
@@ -2219,7 +2241,7 @@ begin
     end;
   end
   else
-    DOMVendorNotSupported('save(object)', sXdom4XmlVendor); { Do Not Localize }
+    DOMVendorNotSupported('save(object)', sAdom4XmlVendor); { Do Not Localize }
 end;
 
 procedure Tox4DOMDocument.saveToStream(const stream: TStream);
@@ -2312,7 +2334,7 @@ end;
 procedure Tox4DOMDocument.set_OnAsyncLoad(const Sender: TObject;
   EventHandler: TAsyncEventHandler);
 begin
-  DOMVendorNotSupported('set_OnAsyncLoad', sXdom4XmlVendor); { Do Not Localize }
+  DOMVendorNotSupported('set_OnAsyncLoad', sAdom4XmlVendor); { Do Not Localize }
 end;
 
 { IDOMXMLProlog }
@@ -2404,7 +2426,7 @@ end;
 
 function Tox4DOMImplementationFactory.Description: String;
 begin
-  Result := sXdom4XmlVendor;
+  Result := sAdom4XmlVendor;
 end;
 
 initialization
