@@ -1,9 +1,10 @@
 {-----------------------------------------------------------------------------
- Unit Name: gtcXdomDomUnit
+ Unit Name: adomxmldom
  Author:    Tor Helland (reworked from Borland's 2.4 wrapper, which also had
             contributions from Keith Wood)
- Purpose:   IDom... interface wrapper for OpenXml Xdom v4
- History:   20080910 th Avoiding error when doing xpath on tree with
+ Purpose:   IDom... interface wrapper for ADOM 4.3 (formerly OpenXML)
+ History:   20090727 me Update to work with ADOM 4.3
+            20080910 th Avoiding error when doing xpath on tree with
                         PreserveWhitespace in effect.
             20080902 th SelectNode and SelectNodes now return literal xpath query
                         results (boolean, number, string) as TDomText/IDomText/IXmlNode.
@@ -63,17 +64,17 @@
  the provisions above, a recipient may use your version of this file
  under either the MPL or the GPL.
 -----------------------------------------------------------------------------}
-unit gtcXdomDomUnit;
-{$define UseXdomV4}
+unit adomxmldom;
+{$define UseADomV4_3}
 interface
 uses Classes,
   Variants,
   ActiveX,
   SysUtils,
   ComObj,
-  {$ifdef UseXdomV4}
-  XdomCore,
-  {$ifdef CLR}cUnicodeCodecsRTL,{$else}cUnicodeCodecsWin32,{$endif}
+  {$ifdef UseADomV4_3}
+  AdomCore_4_3,
+  CodecUtilsWin32,
   {$else}
   Xdom_3_2,
   {$endif}
@@ -85,8 +86,8 @@ uses Classes,
 {$IFEND}
 
 const
-  {$ifdef UseXdomV4}
-  sXdom4XmlVendor = 'Open XML v4';                    { Do not localize }
+  {$ifdef UseADomV4_3}
+  sXdom4XmlVendor = 'ADOM XML v4';                    { Do not localize }
   {$else}
   sXdom4XmlVendor = 'Open XML v3';                    { Do not localize }
   {$endif}
@@ -135,7 +136,7 @@ type
     FReader            : TXmlStandardDomReader;
     FNSGen             : TXmlNamespaceSignalGenerator;
     FXpath             : TXPathExpression;
-    FParseError: PParseErrorInfo;
+    FParseError        : PParseErrorInfo;
     function GetNativeDOMImpl: TdomImplementation;
   protected
     { IDOMImplementation }
@@ -158,7 +159,7 @@ type
       var ParseError: TParseErrorInfo): WordBool;
     function loadxml(const Value: DOMString; const WrapperDoc: Tox4DOMDocument;
       var ParseError: TParseErrorInfo): WordBool;
-    procedure ParseErrorHandler(sender: TObject; error: TdomError);
+    procedure ParseErrorHandler(sender: TObject; error: TdomError; var Go: Boolean);
     property NativeDOMImpl: TdomImplementation read GetNativeDOMImpl;
   end;
 
@@ -780,6 +781,8 @@ constructor Tox4DOMImplementation.Create;
 begin
   inherited;
   FNativeDOMImpl := TDomImplementation.Create(nil);
+  // Error handling.
+  FNativeDOMImpl.OnError := ParseErrorHandler;
 end;
 
 function Tox4DOMImplementation.createDocument(const namespaceURI,
@@ -876,9 +879,6 @@ begin
     FBuilder.KeepComments := True;
     FBuilder.KeepEntityRefs := False;
 
-    // Error handling.
-    FReader.OnError := ParseErrorHandler;
-
     // XPath namespace handling.
     FXpath.OnLookupNamespaceURI := xpathLookupNamespaceURI;
   end;
@@ -888,7 +888,7 @@ function Tox4DOMImplementation.loadFromStream(const stream: TStream;
   const WrapperDoc: Tox4DOMDocument; var ParseError: TParseErrorInfo): WordBool;
 var
   docTemp: TDomDocument;
-  {$ifdef UseXdomV4}
+  {$ifdef UseADomV4_3}
   srcTemp: TXmlInputSource;
   {$endif}
 begin
@@ -903,8 +903,8 @@ begin
   try
 
     try
-      {$ifdef UseXdomV4}
-      srcTemp := TXmlInputSource.Create(stream, '', '', 0, GetSystemEncodingCodecClass, False, 0, 0, 0, 0, 0);
+      {$ifdef UseADomV4_3}
+      srcTemp := TXmlInputSource.Create(stream, '', '', 0, TEncodingRepository.SystemEncodingName, False, 0, 0, 0, 0, 0);
       try
         docTemp := FParser.Parse(srcTemp);
       finally
@@ -916,11 +916,23 @@ begin
       if ParseError.errorCode = 0 then
         FReader.parse(docTemp);
       Result := (ParseError.errorCode = 0);
+
+      if Result then
+      begin
+        // In order to prevent dangling pointer when doing XPath "/" on a PreserveWhitespace document.
+        WrapperDoc.get_documentElement;
+
+        if not WrapperDoc.PreserveWhitespace then
+          WrapperDoc.RemoveWhiteSpaceNodes;
+      end;
     except
       on e: Exception do
       begin
         WrapperDoc.NativeDocument.clear;
-        ParseError.reason := e.Message;
+        if ParseError.errorCodeStr <> '' then
+          ParseError.reason :=  ParseError.errorCodeStr
+        else
+          ParseError.reason := e.Message;
         Result := False;
       end;
     end;
@@ -929,18 +941,13 @@ begin
     docTemp.Free;
   end;
 
-  // In order to prevent dangling pointer when doing XPath "/" on a PreserveWhitespace document.
-  WrapperDoc.get_documentElement;
-
-  if not WrapperDoc.PreserveWhitespace then
-    WrapperDoc.RemoveWhiteSpaceNodes;
 end;
 
 function Tox4DOMImplementation.loadxml(const Value: DOMString;
   const WrapperDoc: Tox4DOMDocument; var ParseError: TParseErrorInfo): WordBool;
 var
   docTemp: TDomDocument;
-  {$ifdef UseXdomV4}
+  {$ifdef UseADomV4_3}
   srcTemp: TXmlInputSource;
   {$endif}
 begin
@@ -955,8 +962,8 @@ begin
   try
 
     try
-      {$ifdef UseXdomV4}
-      srcTemp := TXmlInputSource.Create(Value, '', '', 0, GetSystemEncodingCodecClass, False, 0, 0, 0, 0, 0);
+      {$ifdef UseADomV4_3}
+      srcTemp := TXmlInputSource.Create(Value, '', '', 0, TEncodingRepository.SystemEncodingName, False, 0, 0, 0, 0, 0);
       try
         docTemp := FParser.Parse(srcTemp);
       finally
@@ -968,11 +975,22 @@ begin
       if ParseError.errorCode = 0 then
         FReader.parse(docTemp);
       Result := (ParseError.errorCode = 0);
+      if Result then
+      begin
+        // In order to prevent dangling pointer when doing XPath "/" on a PreserveWhitespace document.
+        WrapperDoc.get_documentElement;
+
+        if not WrapperDoc.PreserveWhitespace then
+          WrapperDoc.RemoveWhiteSpaceNodes;
+      end;
     except
       on e: Exception do
       begin
         WrapperDoc.NativeDocument.clear;
-        ParseError.reason := e.Message;
+        if ParseError.errorCodeStr <> '' then
+          ParseError.reason :=  ParseError.errorCodeStr
+        else
+          ParseError.reason := e.Message;
         Result := False;
       end;
     end;
@@ -981,16 +999,12 @@ begin
     docTemp.Free;
   end;
 
-  // In order to prevent dangling pointer when doing XPath "/" on a PreserveWhitespace document.
-  WrapperDoc.get_documentElement;
-
-  if not WrapperDoc.PreserveWhitespace then
-    WrapperDoc.RemoveWhiteSpaceNodes;
 end;
 
-procedure Tox4DOMImplementation.ParseErrorHandler(sender: TObject; error: TdomError);
+procedure Tox4DOMImplementation.ParseErrorHandler(sender: TObject; error: TdomError; var Go: Boolean);
 begin
   if (error.Severity = DOM_SEVERITY_FATAL_ERROR) or (FParseError.errorCode = 0) then
+  begin
     with FParseError^ do
     begin
       errorCode := Integer(error.RelatedException);
@@ -1002,6 +1016,8 @@ begin
       filePos := error.StartByteNumber;
       url := error.Uri;
     end;
+    Go := False;
+  end;
 end;
 
 procedure Tox4DOMImplementation.xpathLookupNamespaceURI(
@@ -1203,7 +1219,7 @@ end;
 
 function Tox4DOMNode.supports(const feature, version: DOMString): WordBool;
 begin
-  {$ifdef UseXdomV4}
+  {$ifdef UseADomV4_3}
   // Duplicating what was previously in Xdom v3.
   Result := SameText(feature, 'xml')
     and ((version = '') or (version = '1.0') or (version = '2.0'));
@@ -1348,13 +1364,16 @@ constructor Tox4DOMNodeList.Create(AnXpath: TXpathExpression;
 begin
   FNativeNodeList := nil;
 
+{$ifdef UseADomV4_3}
+  FNativeXpathNodeSet := THackXPathExpression(AnXpath).FXPathResult;
+{$else}
   if THackXPathExpression(AnXpath).FXPathResult.ResultType = XPATH_NODE_SET_TYPE then
     // Nodeset, but maybe empty.
     FNativeXpathNodeSet := AnXpath.acquireXPathResult(TdomXPathNodeSetResult)
   else
     // Boolean, number or string;
     FNativeXpathNodeSet := AnXpath.acquireXPathResult(TDomXPathStringResult);
-
+{$endif}
   FWrapperOwnerNode := AWrapperOwnerNode;
 end;
 
