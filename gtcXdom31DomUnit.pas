@@ -2,7 +2,17 @@
  Unit Name: gtcXdom31DomUnit
  Author:    Tor Helland
  Purpose:   IDom... interface wrapper for OpenXml Xdom 3.1
- History:
+ History:   20051004 th Simply replaced all TdomDocumentType with TdomDocumentTypeDecl.
+                        ntDocument_Type_Decl_Node now gives a Tox31DOMDocumentType.
+                        Removed Tox31DOMNotation and Tox31DOMEntity.
+                        Setting Tox31DOMDocument.FDocIsOwned to True.
+                        Replaced CreateDoc with TdomDocument.Create.
+                        Always creates TdomDocumentXpath.
+                        Creates the DocumentElement manually on createDocument.
+                        FBuilder.DocTypeDeclTreatment := dtCheckWellformedness;
+                        Uses TXmlNamespaceSignalGenerator when reading xml.
+                        Returns dummy Tox31DOMDocumentType.get_entities.
+                        Returns dummy Tox31DOMDocumentType.get_notations.
 -----------------------------------------------------------------------------}
 unit gtcXdom31DomUnit;
 
@@ -56,6 +66,7 @@ type
     FParser            : TXmlToDomParser;
     FBuilder           : TXmlDomBuilder;
     FReader            : TXmlStandardDomReader;
+    FNSGen             : TXmlNamespaceSignalGenerator;
     FXpath             : TXPathExpression;
     FParseError: PParseErrorInfo;
     function GetNativeDOMImpl: TdomImplementation;
@@ -277,7 +288,12 @@ type
     FWrapperDocumentTypeChildren: Tox31DOMDocumentTypeChildren;
     FEntities: IDOMNamedNodeMap;
     FNotations: IDOMNamedNodeMap;
-    function GetNativeDocumentType: TdomDocumentType;
+    FDummyEntitiesList: TList;
+    FDummyEntities: TdomNamedNodeMap;
+    FDummyNotationsList: TList;
+    FDummyNotations: TdomNamedNodeMap;
+
+    function GetNativeDocumentType: TdomDocumentTypeDecl;
   protected
     function get_childNodes: IDOMNodeList; override; safecall;
     function hasChildNodes: WordBool; override; safecall;
@@ -291,7 +307,7 @@ type
   public
     constructor Create(ANativeNode: TdomNode; WrapperDocument: Tox31DOMDocument); override;
     destructor Destroy; override;
-    property NativeDocumentType: TdomDocumentType read GetNativeDocumentType;
+    property NativeDocumentType: TdomDocumentTypeDecl read GetNativeDocumentType;
   end;
 
   Tox31DOMDocumentTypeChildren = class(TInterfacedObject, IDOMNodeList)
@@ -303,33 +319,6 @@ type
     function get_length: Integer; safecall;
   public
     constructor Create(NativeDocumentType: Tox31DOMDocumentType);
-  end;
-
-{ Tox31DOMNotation }
-
-  Tox31DOMNotation = class(Tox31DOMNode, IDOMNotation)
-  private
-    function GetNativeNotation: TdomNotation;
-  protected
-    { IDOMNotation }
-    function get_publicId: DOMString; safecall;
-    function get_systemId: DOMString; safecall;
-  public
-    property NativeNotation: TdomNotation read GetNativeNotation;
-  end;
-
-{ Tox31DOMEntity }
-
-  Tox31DOMEntity = class(Tox31DOMNode, IDOMEntity)
-  private
-    function GetNativeEntity: TdomEntity;
-  protected
-    { IDOMEntity }
-    function get_publicId: DOMString; safecall;
-    function get_systemId: DOMString; safecall;
-    function get_notationName: DOMString; safecall;
-  public
-    property NativeEntity: TdomEntity read GetNativeEntity;
   end;
 
 { Tox31DOMEntityReference }
@@ -352,7 +341,7 @@ type
       read GetNativeProcessingInstruction;
   end;
 
-{ Tox31DOMEntity }
+{ Tox31DOMXPathNamespace }
 
   Tox31DOMXPathNamespace = class(Tox31DOMNode, IDOMNode)
   private
@@ -389,7 +378,7 @@ type
     FDocumentElement: IDOMElement;
     FNativeDocumentElement: TdomElement;
   protected
-    function GetNativeDocument: TdomDocument;
+    function GetNativeDocument: TdomDocumentXpath;
     procedure RemoveWhiteSpaceNodes;
     { IDOMDocument }
     function get_doctype: IDOMDocumentType; safecall;
@@ -457,10 +446,10 @@ type
     procedure set_Standalone(const Value: DOMString); safecall;
     procedure set_Version(const Value: DOMString); safecall;
   public
-    constructor Create(AWrapperDOMImpl: Tox31DOMImplementation; ANativeDoc: TdomDocument;
+    constructor Create(AWrapperDOMImpl: Tox31DOMImplementation; ANativeDoc: TdomDocumentXpath;
       DocIsOwned: Boolean); reintroduce;
     destructor Destroy; override;
-    property NativeDocument: TdomDocument read GetNativeDocument;
+    property NativeDocument: TdomDocumentXpath read GetNativeDocument;
     property PreserveWhitespace: Boolean read FPreserveWhitespace;
     property WrapperDOMImpl: Tox31DOMImplementation read FWrapperDOMImpl;
   end;
@@ -515,15 +504,22 @@ begin
 end;
 
 function MakeNode(NativeNode: TdomNode; WrapperDocument: Tox31DOMDocument): IDOMNode;
-const
-  NodeClasses: array [xdom_3_1.TDomNodeType] of Tox31DOMNodeClass =
-    (Tox31DOMNode, Tox31DOMElement, Tox31DOMAttr, Tox31DOMText, Tox31DOMCDATASection,
-     Tox31DOMEntityReference, Tox31DOMEntity, Tox31DOMProcessingInstruction,
-     Tox31DOMComment, Tox31DOMDocument, Tox31DOMDocumentType, Tox31DOMDocumentFragment,
-     Tox31DOMNotation, Tox31DOMNode, Tox31DOMXPathNamespace);
 begin
   if NativeNode <> nil then
-    Result := NodeClasses[NativeNode.NodeType].Create(NativeNode, WrapperDocument)
+    case NativeNode.NodeType of
+      ntUnknown: Result := Tox31DOMNode.Create(NativeNode, WrapperDocument);
+      ntElement_Node: Result := Tox31DOMElement.Create(NativeNode, WrapperDocument);
+      ntAttribute_Node: Result := Tox31DOMAttr.Create(NativeNode, WrapperDocument);
+      ntText_Node: Result := Tox31DOMText.Create(NativeNode, WrapperDocument);
+      ntCDATA_Section_Node: Result := Tox31DOMCDATASection.Create(NativeNode, WrapperDocument);
+      ntEntity_Reference_Node: Result := Tox31DOMEntityReference.Create(NativeNode, WrapperDocument);
+      ntProcessing_Instruction_Node: Result := Tox31DOMProcessingInstruction.Create(NativeNode, WrapperDocument);
+      ntComment_Node: Result := Tox31DOMComment.Create(NativeNode, WrapperDocument);
+      ntDocument_Node: Result := Tox31DOMDocument.Create(GlobalOx31DOM, NativeNode as TdomDocumentXpath, True);
+      ntDocument_Fragment_Node: Result := Tox31DOMDocumentFragment.Create(NativeNode, WrapperDocument);
+      ntDocument_Type_Decl_Node: Result := Tox31DOMDocumentType.Create(NativeNode, WrapperDocument);
+      ntXPath_Namespace_Node: Result := Tox31DOMXPathNamespace.Create(NativeNode, WrapperDocument);
+    end
   else
     Result := nil;
 end;
@@ -620,32 +616,37 @@ end;
 function Tox31DOMImplementation.createDocument(const namespaceURI,
   qualifiedName: DOMString; doctype: IDOMDocumentType): IDOMDocument;
 var
-  domDoc: TdomDocument;
+  domDoc: TdomDocumentXpath;
   intf: Iox31DOMNodeRef;
-  domDocType: TdomDocumentType;
+  domDocType: TdomDocumentTypeDecl;
 begin
   if Supports(doctype, Iox31DOMNodeRef, intf) then
-    domDocType := intf.GetNativeNode as TdomDocumentType
+    domDocType := intf.GetNativeNode as TdomDocumentTypeDecl
   else
     domDocType := nil;
 
-  if (qualifiedName = '') and (namespaceURI = '') then
-  begin
-    domDoc := NativeDOMImpl.CreateDoc;
-    domDoc.clear;
-  end
-  else
-    domDoc := NativeDOMImpl.CreateDocumentNS(namespaceURI, qualifiedName, domDocType);
+  // Create native document object.
+  domDoc := TdomDocumentXpath.Create(NativeDOMImpl);
 
+  // Set DocType.
+  if Assigned(domDocType) then
+    domDoc.AppendChild(domDocType);
+
+  // Create DocumentElement.
+  if qualifiedName <> '' then
+    domDoc.AppendChild(TdomElement.CreateNS(domDoc, namespaceURI, qualifiedName));
+
+  // Create wrapper document object.
   Result := Tox31DOMDocument.Create(self, domDoc, True);
 end;
 
 function Tox31DOMImplementation.createDocumentType(const qualifiedName,
   publicId, systemId: DOMString): IDOMDocumentType;
 var
-  domDocType: TdomDocumentType;
+  domDocType: TdomDocumentTypeDecl;
 begin
-  domDocType := NativeDOMImpl.createDocumentType(qualifiedName, publicId, systemId);
+  domDocType := TdomDocumentTypeDecl.Create(nil, qualifiedName, publicId, systemId, '');
+  //NativeDOMImpl.createDocumentType(qualifiedName, publicId, systemId);
   Result := Tox31DomDocumentType.Create(domDocType, nil);
 end;
 
@@ -657,7 +658,7 @@ end;
 
 procedure Tox31DOMImplementation.FreeDocument(var Doc: TdomDocument);
 begin
-  FNativeDOMImpl.freeDocument(Doc);
+  Doc.Free;
 end;
 
 function Tox31DOMImplementation.GetNativeDOMImpl: TdomImplementation;
@@ -665,10 +666,10 @@ begin
   Result := FNativeDOMImpl;
 end;
 
-function Tox31DOMImplementation.hasFeature(const feature, version: DOMString):
-  WordBool;
+function Tox31DOMImplementation.hasFeature(const feature, version: DOMString): WordBool;
 begin
-  Result := NativeDOMImpl.hasFeature(feature, version);
+  // No longer supported in Xdom.
+  Result := False;
 end;
 
 procedure Tox31DOMImplementation.InitParserAgent;
@@ -676,18 +677,28 @@ begin
   if not Assigned(FParser) then
   begin
     FParser := TXmlToDomParser.Create(nil);
-    FBuilder := TXmlDomBuilder.Create(nil);
     FReader := TXmlStandardDomReader.Create(nil);
+    FNSGen := TXmlNamespaceSignalGenerator.Create(nil);
+    FBuilder := TXmlDomBuilder.Create(nil);
     FXpath := TXPathExpression.Create(nil);
 
     // Setup first step, parsing from file.
     FParser.DOMImpl := NativeDOMImpl;
+    FParser.KeepCDATASections := True;
+    FParser.KeepComments := True;
+    FParser.KeepEntityRefs := True;
 
     // Setup link for second step, parsing to namespace-aware document.
-    FBuilder.KeepDocumentTypeDecl := True;
-    FBuilder.BuildNamespaceTree := True;
-    FReader.NextHandler := FBuilder;
-    FReader.PrefixMapping := True;
+    FReader.NextHandler := FNSGen;
+    FReader.IgnoreUnspecified := False;
+    FNSGen.NextHandler := FBuilder;
+    FNSGen.PrefixMapping := True;
+    FNSGen.SuppressXmlns := False;
+    FBuilder.BuildIDList := True;
+    FBuilder.DocTypeDeclTreatment := dtCheckWellformedness;
+    FBuilder.KeepCDATASections := True;
+    FBuilder.KeepComments := True;
+    FBuilder.KeepEntityRefs := True;
 
     // Error handling.
     FReader.OnError := ParseErrorHandler;
@@ -710,7 +721,7 @@ begin
   try
 
     try
-      docTemp := FParser.parseStream(stream, '', '', nil) as TDomDocument;
+      docTemp := FParser.StreamToDom(stream, '', nil, True);
       if ParseError.errorCode = 0 then
         FReader.parse(docTemp);
       Result := (ParseError.errorCode = 0);
@@ -718,15 +729,13 @@ begin
       on e: Exception do
       begin
         WrapperDoc.NativeDocument.clear;
-        NativeDomImpl.freeUnusedASModelsNS;
         ParseError.reason := e.Message;
         Result := False;
       end;
     end;
 
   finally
-    NativeDomImpl.freeDocument(docTemp);
-    NativeDomImpl.freeUnusedASModelsNS;
+    docTemp.Free;
   end;
 
   if not WrapperDoc.PreserveWhitespace then
@@ -749,7 +758,7 @@ begin
   try
 
     try
-      docTemp := FParser.parseWideString(Value, '', '', nil) as TDomDocument;
+      docTemp := FParser.WideStringToDom(Value, '', nil, True);
       if ParseError.errorCode = 0 then
         FReader.parse(docTemp);
       Result := (ParseError.errorCode = 0);
@@ -757,15 +766,13 @@ begin
       on e: Exception do
       begin
         WrapperDoc.NativeDocument.clear;
-        NativeDomImpl.freeUnusedASModelsNS;
         ParseError.reason := e.Message;
         Result := False;
       end;
     end;
 
   finally
-    NativeDomImpl.freeDocument(docTemp);
-    NativeDomImpl.freeUnusedASModelsNS;
+    docTemp.Free;
   end;
 
   if not WrapperDoc.PreserveWhitespace then
@@ -880,14 +887,21 @@ begin
 end;
 
 function Tox31DOMNode.get_nodeType: DOMNodeType;
-const
-  NodeTypes: array [TDomNodeType] of Word =
-   (0, ELEMENT_NODE, ATTRIBUTE_NODE, TEXT_NODE, CDATA_SECTION_NODE,
-   ENTITY_REFERENCE_NODE, ENTITY_NODE, PROCESSING_INSTRUCTION_NODE,
-   COMMENT_NODE, DOCUMENT_NODE, DOCUMENT_TYPE_NODE, DOCUMENT_FRAGMENT_NODE,
-   NOTATION_NODE, 0, ATTRIBUTE_NODE);
 begin
-  Result := NodeTypes[NativeNode.NodeType];
+  case NativeNode.NodeType of
+    ntUnknown: Result := 0;
+    ntElement_Node: Result := ELEMENT_NODE;
+    ntAttribute_Node: Result := ATTRIBUTE_NODE;
+    ntText_Node: Result := TEXT_NODE;
+    ntCDATA_Section_Node: Result := CDATA_SECTION_NODE;
+    ntEntity_Reference_Node: Result := ENTITY_REFERENCE_NODE;
+    ntProcessing_Instruction_Node: Result := PROCESSING_INSTRUCTION_NODE;
+    ntComment_Node: Result := COMMENT_NODE;
+    ntDocument_Node: Result := DOCUMENT_NODE;
+    ntDocument_Fragment_Node: Result := DOCUMENT_FRAGMENT_NODE;
+    ntDocument_Type_Decl_Node: Result := DOCUMENT_TYPE_NODE;
+    ntXPath_Namespace_Node: Result := ATTRIBUTE_NODE;
+  end;
 end;
 
 function Tox31DOMNode.get_nodeValue: DOMString;
@@ -898,7 +912,8 @@ end;
 function Tox31DOMNode.get_ownerDocument: IDOMDocument;
 begin
   if not Assigned(FOwnerDocument) then
-    FOwnerDocument := Tox31DOMDocument.Create(GlobalOx31DOM, NativeNode.OwnerDocument, False);
+    FOwnerDocument := Tox31DOMDocument.Create(GlobalOx31DOM,
+      NativeNode.OwnerDocument as TdomDocumentXpath, False);
   Result := FOwnerDocument;
 end;
 
@@ -1005,10 +1020,14 @@ end;
 procedure Tox31DOMNode.set_text(const Value: DOMString);
 var
   Index: Integer;
+  txn: TdomText;
 begin
   for Index := 0 to NativeNode.ChildNodes.Length - 1 do
     NativeNode.RemoveChild(NativeNode.ChildNodes.Item(Index));
-  NativeNode.AppendChild(NativeNode.OwnerDocument.CreateTextNode(Value))
+
+  txn := TdomText.Create(NativeNode.OwnerDocument);
+  txn.Data := Value;
+  NativeNode.AppendChild(txn);
 end;
 
 function Tox31DOMNode.get_xml: DOMString;
@@ -1365,9 +1384,9 @@ begin
   inherited Destroy;
 end;
 
-function Tox31DOMDocumentType.GetNativeDocumentType: TdomDocumentType;
+function Tox31DOMDocumentType.GetNativeDocumentType: TdomDocumentTypeDecl;
 begin
-  Result := NativeNode as TdomDocumentType;
+  Result := NativeNode as TdomDocumentTypeDecl;
 end;
 
 function Tox31DOMDocumentType.get_childNodes: IDOMNodeList;
@@ -1377,8 +1396,14 @@ end;
 
 function Tox31DOMDocumentType.get_entities: IDOMNamedNodeMap;
 begin
+  // Empty list. Can't grab entities from here, only from TdomDocument.ValidationAgent.
   if not Assigned(FEntities) then
-    FEntities := MakeNamedNodeMap(NativeDocumentType.Entities, Self);
+  begin
+    FDummyEntitiesList := TList.Create;
+    FDummyEntities := TdomNamedNodeMap.Create(NativeNode, FDummyEntitiesList, [], False);
+    FEntities := MakeNamedNodeMap(FDummyEntities, Self);
+  end;
+
   Result := FEntities;
 end;
 
@@ -1394,8 +1419,14 @@ end;
 
 function Tox31DOMDocumentType.get_notations: IDOMNamedNodeMap;
 begin
+  // Notations no longer supported.
   if not Assigned(FNotations) then
-    FNotations := MakeNamedNodeMap(NativeDocumentType.Notations, Self);
+  begin
+    FDummyNotationsList := TList.Create;
+    FDummyNotations := TdomNamedNodeMap.Create(NativeNode, FDummyNotationsList, [], False);
+    FNotations := MakeNamedNodeMap(FDummyNotations, Self);
+  end;
+
   Result := FNotations;
 end;
 
@@ -1439,45 +1470,6 @@ function Tox31DOMDocumentTypeChildren.get_length: Integer;
 begin
   Result :=
     FWrapperOwnerDocumentType.get_entities.length + FWrapperOwnerDocumentType.get_notations.length;
-end;
-
-{ Tox31DOMNotation }
-
-function Tox31DOMNotation.GetNativeNotation: TdomNotation;
-begin
-  Result := NativeNode as TdomNotation;
-end;
-
-function Tox31DOMNotation.get_publicId: DOMString;
-begin
-  Result := NativeNotation.PublicId;
-end;
-
-function Tox31DOMNotation.get_systemId: DOMString;
-begin
-  Result := NativeNotation.SystemId;
-end;
-
-{ Tox31DOMEntity }
-
-function Tox31DOMEntity.GetNativeEntity: TdomEntity;
-begin
-  Result := NativeNode as TdomEntity;
-end;
-
-function Tox31DOMEntity.get_notationName: DOMString;
-begin
-  Result := NativeEntity.NotationName;
-end;
-
-function Tox31DOMEntity.get_publicId: DOMString;
-begin
-  Result := NativeEntity.PublicId;
-end;
-
-function Tox31DOMEntity.get_systemId: DOMString;
-begin
-  Result := NativeEntity.SystemId;
 end;
 
 { Tox31DOMProcessingInstruction }
@@ -1558,7 +1550,7 @@ end;
 { Tox31DOMDocument }
 
 constructor Tox31DOMDocument.Create(AWrapperDOMImpl: Tox31DOMImplementation;
-  ANativeDoc: TdomDocument; DocIsOwned: Boolean);
+  ANativeDoc: TdomDocumentXpath; DocIsOwned: Boolean);
 begin
   FDocIsOwned := DocIsOwned;
   FWrapperDOMImpl := AWrapperDOMImpl;
@@ -1573,73 +1565,84 @@ begin
   inherited Destroy;
 end;
 
-function Tox31DOMDocument.GetNativeDocument: TdomDocument;
+function Tox31DOMDocument.GetNativeDocument: TdomDocumentXpath;
 begin
-  Result := NativeNode as TdomDocument;
+  Result := NativeNode as TdomDocumentXpath;
 end;
 
 function Tox31DOMDocument.createAttribute(const name: DOMString): IDOMAttr;
 begin
-  Result := Tox31DOMAttr.Create(NativeDocument.CreateAttributeNS('', name), Self);
+  Result := Tox31DOMAttr.Create(TdomAttr.CreateNS(NativeDocument, '', name, True), self);
 end;
 
 function Tox31DOMDocument.createAttributeNS(const namespaceURI,
   qualifiedName: DOMString): IDOMAttr;
 begin
-  Result := Tox31DOMAttr.Create(NativeDocument.CreateAttributeNS(
-    namespaceURI, qualifiedName), Self);
+  Result := Tox31DOMAttr.Create(
+    TdomAttr.CreateNS(NativeDocument, namespaceURI, qualifiedName, True), self);
 end;
 
 function Tox31DOMDocument.createCDATASection(const data: DOMString):
   IDOMCDATASection;
 begin
-  Result := Tox31DOMCDATASection.Create(NativeDocument.CreateCDATASection(data), Self);
+  Result := Tox31DOMCDATASection.Create(TdomCDATASection.Create(NativeDocument), self);
 end;
 
 function Tox31DOMDocument.createComment(const data: DOMString): IDOMComment;
+var
+  comm: TdomComment;
 begin
-  Result := Tox31DOMComment.Create(NativeDocument.CreateComment(data), Self);
+  comm := TdomComment.Create(NativeDocument);
+  comm.Data := data;
+  Result := Tox31DOMComment.Create(comm, self);
 end;
 
 function Tox31DOMDocument.createDocumentFragment: IDOMDocumentFragment;
 begin
-  Result := Tox31DOMDocumentFragment.Create(NativeDocument.CreateDocumentFragment, Self);
+  Result := Tox31DOMDocumentFragment.Create(TdomDocumentFragment.Create(NativeDocument), self);
 end;
 
 function Tox31DOMDocument.createElement(const tagName: DOMString): IDOMElement;
 begin
-  Result := Tox31DOMElement.Create(NativeDocument.CreateElement(tagName), Self);
+  Result := Tox31DOMElement.Create(TdomElement.CreateNS(NativeDocument, '', tagName), self);
 end;
 
 function Tox31DOMDocument.createElementNS(const namespaceURI,
   qualifiedName: DOMString): IDOMElement;
 begin
   Result := Tox31DOMElement.Create(
-    NativeDocument.CreateElementNS(namespaceURI, qualifiedName), Self);
+    TdomElement.CreateNS(NativeDocument, namespaceURI, qualifiedName), self);
 end;
 
 function Tox31DOMDocument.createEntityReference(const name: DOMString):
   IDOMEntityReference;
 begin
   Result := Tox31DOMEntityReference.Create(
-    NativeDocument.CreateEntityReference(name), Self);
+    TdomEntityReference.Create(NativeDocument, name), self);
 end;
 
 function Tox31DOMDocument.createProcessingInstruction(const target,
   data: DOMString): IDOMProcessingInstruction;
+var
+  pi: TdomProcessingInstruction;
 begin
-  Result := Tox31DOMProcessingInstruction.Create(
-    NativeDocument.CreateProcessingInstruction(target, data), Self);
+  pi := TdomProcessingInstruction.Create(NativeDocument, target);
+  pi.Data := data;
+  Result := Tox31DOMProcessingInstruction.Create(pi, self);
 end;
 
 function Tox31DOMDocument.createTextNode(const data: DOMString): IDOMText;
+var
+  text: TdomText;
 begin
-  Result := Tox31DOMText.Create(NativeDocument.CreateTextNode(data), Self);
+  text := TdomText.Create(NativeDocument);
+  text.Data := data;
+  Result := Tox31DOMText.Create(text, self);
 end;
 
 function Tox31DOMDocument.get_doctype: IDOMDocumentType;
 begin
-  Result := Tox31DOMDocumentType.Create(NativeDocument.docType, Self);
+  Result := Tox31DOMDocumentType.Create(NativeDocument.DoctypeDecl, Self);
 end;
 
 function Tox31DOMDocument.get_documentElement: IDOMElement;
@@ -1665,7 +1668,7 @@ end;
 
 function Tox31DOMDocument.getElementsByTagName(const tagName: DOMString): IDOMNodeList;
 begin
-  Result := MakeNodeList(NativeDocument.GetElementsByTagName(tagName), Self);
+  Result := MakeNodeList(NativeDocument.GetElementsByTagNameNS('', tagName), Self);
 end;
 
 function Tox31DOMDocument.getElementsByTagNameNS(const namespaceURI,

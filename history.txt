@@ -2,6 +2,11 @@
 Wrapper for XDOM 3.1 through IXmlDocument.
 Copyright (c) GITEK AS, www.gitek.no
 
+20051019:
+Made corrections to accommodate changes up to XDOM 3.1.26.
+XDOM had changed the way a lot of objects should be handled.
+See the history list for XDOM itself.
+
 20050415:
 Made Tox31DOMXPathNamespace.get_namespaceURI overridden.
 Ran against XDOM 3.1.17, with some unit tests involving the
