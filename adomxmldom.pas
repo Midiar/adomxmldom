@@ -95,6 +95,14 @@ const
   {$endif}
 
 type
+// Type alias for IDOMPersist.loadxml method which changed signatures in Delphi 2010
+{$ifdef VER210 or DOMWrapperVersion > 1.3}
+  TXMLFileName = WideString;
+{$else}
+  TXMLFileName = DOMString;
+{$endif}
+
+type
 
 { Iox4DOMNodeRef }
 
@@ -159,7 +167,7 @@ type
     procedure InitParserAgent;
     function loadFromStream(const stream: TStream; const WrapperDoc: Tox4DOMDocument;
       var ParseError: TParseErrorInfo): WordBool;
-    function loadxml(const Value: DOMString; const WrapperDoc: Tox4DOMDocument;
+    function loadxml(const Value: TXMLFileName; const WrapperDoc: Tox4DOMDocument;
       var ParseError: TParseErrorInfo): WordBool;
     procedure ParseErrorHandler(sender: TObject; error: TdomError; var Go: Boolean);
     property NativeDOMImpl: TdomImplementation read GetNativeDOMImpl;
@@ -500,7 +508,7 @@ type
     function asyncLoadState: Integer; safecall;
     function load(source: OleVariant): WordBool; safecall;
     function loadFromStream(const stream: TStream): WordBool; {$IFDEF WRAPVER1.1} overload; {$ENDIF} safecall;
-    function loadxml(const Value: DOMString): WordBool; safecall;
+    function loadxml(const Value: TXMLFileName): WordBool; safecall;
     procedure save(destination: OleVariant); safecall;
     procedure saveToStream(const stream: TStream); {$IFDEF WRAPVER1.1} overload; {$ENDIF} safecall;
     procedure set_OnAsyncLoad(const Sender: TObject;
@@ -952,7 +960,7 @@ begin
 
 end;
 
-function Tox4DOMImplementation.loadxml(const Value: DOMString;
+function Tox4DOMImplementation.loadxml(const Value: TXMLFileName;
   const WrapperDoc: Tox4DOMDocument; var ParseError: TParseErrorInfo): WordBool;
 var
   docTemp: TDomDocument;
@@ -2217,7 +2225,7 @@ begin
     DOMVendorNotSupported('load(object)', sAdom4XmlVendor); { Do Not Localize }
 end;
 
-function Tox4DOMDocument.loadxml(const Value: DOMString): WordBool;
+function Tox4DOMDocument.loadxml(const Value: TXMLFileName): WordBool;
 begin
   Result := WrapperDOMImpl.loadxml(Value, self, FParseError);
 end;
