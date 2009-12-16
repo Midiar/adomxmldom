@@ -96,11 +96,11 @@ const
 
 type
 // Type alias for IDOMPersist.loadxml method which changed signatures in Delphi 2010
-{$ifdef VER210 or DOMWrapperVersion > 1.3}
+{$if (CompilerVersion >= 21.0) or (DOMWrapperVersion > 1.3)}
   TXMLFileName = WideString;
 {$else}
   TXMLFileName = DOMString;
-{$endif}
+{$ifend}
 
 type
 
