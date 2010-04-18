@@ -68,12 +68,12 @@
  the provisions above, a recipient may use your version of this file
  under either the MPL or the GPL.
 -----------------------------------------------------------------------------}
-{$define UseADomV4_3} // Bundled with Delphi 2010 and onward, adomxmldom.pas.
-{.$define UseADomV4_3_Custom} // Units prefixed with dk to coexist with the RTL bundled version.
+{.$define UseADomV4_3} // Bundled with Delphi 2010 and onward, adomxmldom.pas.
+{$define UseADomV4_3_Custom} // Units prefixed with dk to coexist with the RTL bundled version.
 {.$define UseADomV5_Custom} // Units prefixed with dk.
 {.$define UseADomV3_2_Custom} // Not tested.
 
-unit adomxmldom;
+unit gtcAdomxmldom;
 
 interface
 uses Classes,
