@@ -83,15 +83,12 @@ uses Classes,
   ComObj,
   {$ifdef UseADomV4_3}
   AdomCore_4_3,
-  CodecUtilsWin32,
   {$endif}
   {$ifdef UseADomV4_3_Custom}
   dkAdomCore_4_3,
-  dkCodecUtilsWin32,
   {$endif}
   {$ifdef UseADomV5_Custom}
   dkAdomCore,
-  dkCodecUtilsWin32,
   {$endif}
   {$ifdef UseADomV3_2_Custom}
   Xdom_3_2,
@@ -944,7 +941,7 @@ begin
 
     try
       {$ifndef UseADomV3_2_Custom}
-      srcTemp := TXmlInputSource.Create(stream, '', '', 0, TEncodingRepository.SystemEncodingName, False, 0, 0, 0, 0, 0);
+      srcTemp := TXmlInputSource.Create(stream, '', '', 0, '', False, 0, 0, 0, 0, 0);
       try
         docTemp := FParser.Parse(srcTemp);
       finally
@@ -1003,7 +1000,7 @@ begin
 
     try
       {$ifndef UseADomV3_2_Custom}
-      srcTemp := TXmlInputSource.Create(Value, '', '', 0, TEncodingRepository.SystemEncodingName, False, 0, 0, 0, 0, 0);
+      srcTemp := TXmlInputSource.Create(Value, '', '', 0, '', False, 0, 0, 0, 0, 0);
       try
         docTemp := FParser.Parse(srcTemp);
       finally
