@@ -1000,7 +1000,7 @@ begin
 
     try
       {$ifndef UseADomV3_2_Custom}
-      srcTemp := TXmlInputSource.Create(Value, '', '', 0, '', False, 0, 0, 0, 0, 0);
+      srcTemp := TXmlInputSource.Create(Value, '', '', 0, False, 0, 0, 0, 0, 0);
       try
         docTemp := FParser.Parse(srcTemp);
       finally
