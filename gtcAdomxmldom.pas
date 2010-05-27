@@ -3,7 +3,8 @@
  Author:    Tor Helland (reworked from Borland's 2.4 wrapper, which also had
             contributions from Keith Wood)
  Purpose:   IDom... interface wrapper for ADOM 4.3 (formerly OpenXML)
- History:   20100321 th Support for ADOM v4.3 and v5 renamed to exist
+ History:   20100525 cw Updates for compiling on Mac OSX.
+            20100321 th Support for ADOM v4.3 and v5 renamed to exist
                         alongside ADOM and adomxmldom bundled with Delphi 2010++.
             20090809 th Fixed some serious flaws in selectNode/selectNodes (now
                         makes a copy of the nodes returned from TXpathExpression).
@@ -78,9 +79,13 @@ unit gtcAdomxmldom;
 interface
 uses Classes,
   Variants,
+{$IFDEF MSWINDOWS}
   ActiveX,
-  SysUtils,
   ComObj,
+{$ELSE}
+  Types,
+{$ENDIF}
+  SysUtils,
   {$ifdef UseADomV4_3}
   AdomCore_4_3,
   {$endif}
@@ -585,10 +590,8 @@ implementation
 uses
   TypInfo,
   SyncObjs,
-{$IFDEF LINUX}
-  Types,
-  IdHttp,
-  UrlMon
+{$IFDEF POSIX}
+  IdHttp
 {$ENDIF}
 {$IFDEF MSWINDOWS}
   Windows
@@ -759,7 +762,7 @@ begin
     HelpFile := (ExceptObject as EOleException).HelpFile;
   Result := HandleSafeCallException(ExceptObject, ExceptAddr, IDOMNode, '', Helpfile);
 {$ELSE}
-{$IFDEF LINUX}
+{$IFDEF POSIX}
   if ExceptObject is Exception then
     SysUtils.SetSafeCallExceptionMsg(Exception(ExceptObject).Message);
   Result := E_FAIL;
@@ -2167,7 +2170,7 @@ begin
   end;
 end;
 
-{$IFDEF LINUX}
+{$IFDEF POSIX}
 procedure LoadFromURL(URL: string; Stream: TStream);
 var
   IndyHTTP: TIDHttp;
@@ -2177,7 +2180,7 @@ begin
     IndyHttp.Request.Accept := 'text/xml, text/html, application/octet-stream'; { Do not localize }
     IndyHttp.Request.UserAgent := 'Mozilla/3.0 (compatible; Indy Library)'; { Do not localize }
     IndyHttp.Request.ContentType := 'text/xml';   { Do not localize }
-    IndyHttp.Request.Location := URL;
+    IndyHttp.Request.URL := URL;
     IndyHttp.Request.Connection := URL;
     IndyHttp.Intercept := Nil;
     IndyHTTP.Get(Url, Stream);
