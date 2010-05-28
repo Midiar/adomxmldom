@@ -3,7 +3,9 @@
  Author:    Tor Helland (reworked from Borland's 2.4 wrapper, which also had
             contributions from Keith Wood)
  Purpose:   IDom... interface wrapper for ADOM 4.3 (formerly OpenXML)
- History:   20100525 cw Updates for compiling on Mac OSX.
+ History:   20100528 th A non-namespaced element as a child of an element with a
+                        default namespace, now gets an empty xmlns attribute.
+            20100525 cw Updates for compiling on Mac OSX.
             20100321 th Support for ADOM v4.3 and v5 renamed to exist
                         alongside ADOM and adomxmldom bundled with Delphi 2010++.
             20090809 th Fixed some serious flaws in selectNode/selectNodes (now
@@ -214,6 +216,7 @@ type
     FXpathNodeListCopy: IDomNodeList;
   protected
     function AllocParser: TDomToXmlParser; // Must be freed by the calling routine.
+    procedure EnsureUndefXmlnsIfNeeded(xdnChild: TDomNode);
 
     { Iox4DOMNodeRef }
     function GetNativeNode: TdomNode;
@@ -1125,11 +1128,25 @@ begin
   if xdnReturnedChild = xdnNewChild then
     Result := newChild else
     Result := MakeNode(xdnReturnedChild, FWrapperDocument);
+
+  EnsureUndefXmlnsIfNeeded(xdnReturnedChild);
 end;
 
 function Tox4DOMNode.cloneNode(deep: WordBool): IDOMNode;
 begin
   Result := MakeNode(NativeNode.CloneNode(deep), FWrapperDocument);
+end;
+
+procedure Tox4DOMNode.EnsureUndefXmlnsIfNeeded(xdnChild: TDomNode);
+begin
+  if (xdnChild.NodeType = ntElement_Node) and (xdnChild.NamespaceURI = '')
+    and (NativeNode.LookupNamespaceURI('') <> '') then
+  begin
+    // Add an empty xmlns attribute if not already there.
+    if not Assigned((xdnChild as TDomElement).GetAttributeNodeNS('http://www.w3.org/2000/xmlns/', 'xmlns')) then
+      (xdnChild as TDomElement).SetAttributeNS('http://www.w3.org/2000/xmlns/',
+         'xmlns', '');
+  end;
 end;
 
 function Tox4DOMNode.get_attributes: IDOMNamedNodeMap;
@@ -1233,9 +1250,14 @@ begin
 end;
 
 function Tox4DOMNode.insertBefore(const newChild, refChild: IDOMNode): IDOMNode;
+var
+  xdnNewChild: TDomNode;
 begin
-  Result := MakeNode(NativeNode.InsertBefore(GetNativeNodeOfIntfNode(newChild),
+  xdnNewChild := GetNativeNodeOfIntfNode(newChild);
+  Result := MakeNode(NativeNode.InsertBefore(xdnNewChild,
     GetNativeNodeOfIntfNode(refChild)), FWrapperDocument);
+
+  EnsureUndefXmlnsIfNeeded(xdnNewChild);
 end;
 
 procedure Tox4DOMNode.normalize;
@@ -1249,9 +1271,14 @@ begin
 end;
 
 function Tox4DOMNode.replaceChild(const newChild, oldChild: IDOMNode): IDOMNode;
+var
+  xdnNewChild: TDomNode;
 begin
-  Result := MakeNode(NativeNode.ReplaceChild(GetNativeNodeOfIntfNode(newChild),
+  xdnNewChild := GetNativeNodeOfIntfNode(newChild);
+  Result := MakeNode(NativeNode.ReplaceChild(xdnNewChild,
     GetNativeNodeOfIntfNode(oldChild)), FWrapperDocument);
+
+  EnsureUndefXmlnsIfNeeded(xdnNewChild);
 end;
 
 procedure Tox4DOMNode.set_nodeValue(value: DOMString);
