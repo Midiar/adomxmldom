@@ -74,6 +74,10 @@
 {.$define UseADomV5_Custom} // Units prefixed with dk.
 {.$define UseADomV3_2_Custom} // Not tested.
 
+{$define _RefCountLog}
+{$define _RefCountVirtual}
+{$define _ReleaseDependsFirst}
+{$define _NoDocElemFieldVar}
 unit gtcAdomxmldom;
 
 interface
@@ -140,8 +144,8 @@ type
 
   Tox4DOMInterface = class(TInterfacedObject)
   protected
-    function _AddRef: Integer; stdcall;
-    function _Release: Integer; stdcall;
+    function _AddRef: Integer; {$ifdef _RefCountVirtual}virtual;{$endif} stdcall;
+    function _Release: Integer; {$ifdef _RefCountVirtual}virtual;{$endif} stdcall;
   public
     function SafeCallException(ExceptObject: TObject; ExceptAddr: Pointer): HRESULT; override;
   end;
@@ -344,8 +348,8 @@ type
     function GetNativeElement: TdomElement;
     procedure CheckNamespaceAware;
   protected
-    function _AddRef: Integer; stdcall;
-    function _Release: Integer; stdcall;
+    function _AddRef: Integer; {$ifdef _RefCountVirtual}override;{$endif} stdcall;
+    function _Release: Integer; {$ifdef _RefCountVirtual}override;{$endif} stdcall;
 
     { IDOMElement }
     function get_tagName: DOMString; safecall;
@@ -487,7 +491,7 @@ type
     FDocIsOwned: Boolean;
     FParseError: TParseErrorInfo;
     FPreserveWhitespace: Boolean;
-    FDocumentElement: IDOMElement;
+    FDocumentElement: IDOMElement; // No longer used.
     FNativeDocumentElement: TdomElement;
   protected
     function GetNativeDocument: TdomDocumentXpath;
@@ -741,11 +745,17 @@ end;
 function Tox4DOMInterface._AddRef: Integer;
 begin
   Result := inherited _AddRef;
+  {$ifdef _RefCountLog}
+  if IsConsole then writeln(Format('%s._AddRef: %d', [self.ClassName, Result]));
+  {$endif}
 end;
 
 function Tox4DOMInterface._Release: Integer;
 begin
   Result := inherited _Release;
+  {$ifdef _RefCountLog}
+  if IsConsole then writeln(Format('%s._Release: %d', [self.ClassName, Result]));
+  {$endif}
 end;
 
 function Tox4DOMInterface.SafeCallException(ExceptObject: TObject;
@@ -1732,20 +1742,41 @@ end;
 
 function Tox4DOMElement._AddRef: Integer;
 begin
+  {$ifdef _RefCountLog}
+  if IsConsole then writeln('-------------start Tox4DOMElement._AddRef');
+  {$endif}
+
   Result := inherited _AddRef;
   if Assigned(NativeNode) and Assigned(NativeNode.RootDocument)
     and (NativeNode = NativeNode.RootDocument.DocumentElement)
     and Assigned(self.WrapperDocument) then
     self.WrapperDocument._AddRef;
+
+  {$ifdef _RefCountLog}
+  if IsConsole then writeln('-------------end Tox4DOMElement._AddRef');
+  {$endif}
 end;
 
 function Tox4DOMElement._Release: Integer;
 begin
+  {$ifdef _RefCountLog}
+  if IsConsole then writeln('-------------start Tox4DOMElement._Release');
+  {$endif}
+
+  {$ifndef _ReleaseDependsFirst}
   Result := inherited _Release;
+  {$endif}
   if Assigned(NativeNode) and Assigned(NativeNode.RootDocument)
     and (NativeNode = NativeNode.RootDocument.DocumentElement)
     and Assigned(self.WrapperDocument) then
     self.WrapperDocument._Release;
+  {$ifdef _ReleaseDependsFirst}
+  Result := inherited _Release;
+  {$endif}
+
+  {$ifdef _RefCountLog}
+  if IsConsole then writeln('-------------end Tox4DOMElement._Release');
+  {$endif}
 end;
 
 procedure Tox4DOMElement.normalize;
@@ -2038,6 +2069,7 @@ end;
 
 function Tox4DOMDocument.get_documentElement: IDOMElement;
 begin
+  {$ifdef _NoDocElemFieldVar}
   if not Assigned(FDocumentElement) or
     (FNativeDocumentElement <> NativeDocument.documentElement) then { Test if underlying document NativeElement changed }
   begin
@@ -2045,6 +2077,12 @@ begin
     FDocumentElement := MakeNode(FNativeDocumentElement, Self) as IDOMElement;
   end;
   Result := FDocumentElement;
+  {$else}
+  if FNativeDocumentElement <> NativeDocument.documentElement then { Test if underlying document NativeElement changed }
+    FNativeDocumentElement := NativeDocument.documentElement;
+
+  Result := MakeNode(FNativeDocumentElement, Self) as IDOMElement;
+  {$endif}
 end;
 
 function Tox4DOMDocument.get_domImplementation: IDOMImplementation;
