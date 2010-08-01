@@ -77,7 +77,8 @@
 {$define _RefCountLog}
 {$define _RefCountVirtual}
 {$define _ReleaseDependsFirst}
-{$define _NoDocElemFieldVar}
+{.$define _NoDocElemFieldVar}
+{$define _XpathRootNodeCase}
 unit gtcAdomxmldom;
 
 interface
@@ -1448,6 +1449,7 @@ end;
 
 function Tox4DOMNodeList.get_item(index: Integer): IDOMNode;
 var
+  xdomNode: TDomNode;
   xdomText: TDomText;
 begin
   if Assigned(NativeNodeList) then
@@ -1455,7 +1457,16 @@ begin
   else if Assigned(FNativeXpathNodeSet) then
   begin
     if FNativeXpathNodeSet.ResultType = XPATH_NODE_SET_TYPE then
-      Result := MakeNode(FNativeXpathNodeSet.item(index), FWrapperOwnerNode.WrapperDocument)
+    begin
+      xdomNode := FNativeXpathNodeSet.item(index);
+      {$ifdef _XpathRootNodeCase}
+      if Assigned(FWrapperOwnerNode.WrapperDocument)
+        and (xdomNode = FWrapperOwnerNode.WrapperDocument.NativeDocument) then
+        Result := FWrapperOwnerNode.WrapperDocument // Xpath '/' case.
+      else
+      {$endif}
+        Result := MakeNode(xdomNode, FWrapperOwnerNode.WrapperDocument);
+    end
     else
     begin
       // Single value (number/boolean/string)
