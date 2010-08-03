@@ -492,7 +492,7 @@ type
     FDocIsOwned: Boolean;
     FParseError: TParseErrorInfo;
     FPreserveWhitespace: Boolean;
-    FDocumentElement: IDOMElement; // No longer used.
+    FDocumentElement: IDOMElement; // No longer used. _NoDocElemFieldVar
     FNativeDocumentElement: TdomElement;
   protected
     function GetNativeDocument: TdomDocumentXpath;
@@ -747,7 +747,7 @@ function Tox4DOMInterface._AddRef: Integer;
 begin
   Result := inherited _AddRef;
   {$ifdef _RefCountLog}
-  if IsConsole then writeln(Format('%s._AddRef: %d', [self.ClassName, Result]));
+  if IsConsole then OutputDebugString(PChar(Format('%s._AddRef: %d', [self.ClassName, Result])));
   {$endif}
 end;
 
@@ -755,7 +755,7 @@ function Tox4DOMInterface._Release: Integer;
 begin
   Result := inherited _Release;
   {$ifdef _RefCountLog}
-  if IsConsole then writeln(Format('%s._Release: %d', [self.ClassName, Result]));
+  if IsConsole then OutputDebugString(PChar(Format('%s._Release: %d', [self.ClassName, Result])));
   {$endif}
 end;
 
@@ -1754,7 +1754,7 @@ end;
 function Tox4DOMElement._AddRef: Integer;
 begin
   {$ifdef _RefCountLog}
-  if IsConsole then writeln('-------------start Tox4DOMElement._AddRef');
+  if IsConsole then OutputDebugString(PChar('-------------start Tox4DOMElement._AddRef'));
   {$endif}
 
   Result := inherited _AddRef;
@@ -1764,14 +1764,14 @@ begin
     self.WrapperDocument._AddRef;
 
   {$ifdef _RefCountLog}
-  if IsConsole then writeln('-------------end Tox4DOMElement._AddRef');
+  if IsConsole then OutputDebugString(PChar('-------------end Tox4DOMElement._AddRef'));
   {$endif}
 end;
 
 function Tox4DOMElement._Release: Integer;
 begin
   {$ifdef _RefCountLog}
-  if IsConsole then writeln('-------------start Tox4DOMElement._Release');
+  if IsConsole then OutputDebugString(PChar('-------------start Tox4DOMElement._Release'));
   {$endif}
 
   {$ifndef _ReleaseDependsFirst}
@@ -1786,7 +1786,7 @@ begin
   {$endif}
 
   {$ifdef _RefCountLog}
-  if IsConsole then writeln('-------------end Tox4DOMElement._Release');
+  if IsConsole then OutputDebugString(PChar('-------------end Tox4DOMElement._Release'));
   {$endif}
 end;
 
