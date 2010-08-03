@@ -75,8 +75,9 @@
 {.$define UseADomV3_2_Custom} // Not tested.
 
 {$define _RefCountLog}
-{$define _RefCountVirtual}
+{.$define _RefCountVirtual}
 {$define _ReleaseDependsFirst}
+{$define _NoDocRefCountOnElem}
 {.$define _NoDocElemFieldVar}
 {$define _XpathRootNodeCase}
 unit gtcAdomxmldom;
@@ -1758,10 +1759,12 @@ begin
   {$endif}
 
   Result := inherited _AddRef;
+  {$ifndef _NoDocRefCountOnElem}
   if Assigned(NativeNode) and Assigned(NativeNode.RootDocument)
     and (NativeNode = NativeNode.RootDocument.DocumentElement)
     and Assigned(self.WrapperDocument) then
     self.WrapperDocument._AddRef;
+  {$endif}
 
   {$ifdef _RefCountLog}
   if IsConsole then OutputDebugString(PChar('-------------end Tox4DOMElement._AddRef'));
@@ -1777,10 +1780,12 @@ begin
   {$ifndef _ReleaseDependsFirst}
   Result := inherited _Release;
   {$endif}
+  {$ifndef _NoDocRefCountOnElem}
   if Assigned(NativeNode) and Assigned(NativeNode.RootDocument)
     and (NativeNode = NativeNode.RootDocument.DocumentElement)
     and Assigned(self.WrapperDocument) then
     self.WrapperDocument._Release;
+  {$endif}
   {$ifdef _ReleaseDependsFirst}
   Result := inherited _Release;
   {$endif}
