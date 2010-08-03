@@ -75,11 +75,6 @@
 {.$define UseADomV3_2_Custom} // Not tested.
 
 {$define _RefCountLog}
-{.$define _RefCountVirtual}
-{$define _ReleaseDependsFirst}
-{$define _NoDocRefCountOnElem}
-{.$define _NoDocElemFieldVar}
-{$define _XpathRootNodeCase}
 unit gtcAdomxmldom;
 
 interface
@@ -146,8 +141,8 @@ type
 
   Tox4DOMInterface = class(TInterfacedObject)
   protected
-    function _AddRef: Integer; {$ifdef _RefCountVirtual}virtual;{$endif} stdcall;
-    function _Release: Integer; {$ifdef _RefCountVirtual}virtual;{$endif} stdcall;
+    function _AddRef: Integer; stdcall;
+    function _Release: Integer; stdcall;
   public
     function SafeCallException(ExceptObject: TObject; ExceptAddr: Pointer): HRESULT; override;
   end;
@@ -350,8 +345,8 @@ type
     function GetNativeElement: TdomElement;
     procedure CheckNamespaceAware;
   protected
-    function _AddRef: Integer; {$ifdef _RefCountVirtual}override;{$endif} stdcall;
-    function _Release: Integer; {$ifdef _RefCountVirtual}override;{$endif} stdcall;
+    function _AddRef: Integer; stdcall;
+    function _Release: Integer; stdcall;
 
     { IDOMElement }
     function get_tagName: DOMString; safecall;
@@ -493,7 +488,7 @@ type
     FDocIsOwned: Boolean;
     FParseError: TParseErrorInfo;
     FPreserveWhitespace: Boolean;
-    FDocumentElement: IDOMElement; // No longer used. _NoDocElemFieldVar
+    FDocumentElement: IDOMElement;
     FNativeDocumentElement: TdomElement;
   protected
     function GetNativeDocument: TdomDocumentXpath;
@@ -1460,12 +1455,10 @@ begin
     if FNativeXpathNodeSet.ResultType = XPATH_NODE_SET_TYPE then
     begin
       xdomNode := FNativeXpathNodeSet.item(index);
-      {$ifdef _XpathRootNodeCase}
       if Assigned(FWrapperOwnerNode.WrapperDocument)
         and (xdomNode = FWrapperOwnerNode.WrapperDocument.NativeDocument) then
         Result := FWrapperOwnerNode.WrapperDocument // Xpath '/' case.
       else
-      {$endif}
         Result := MakeNode(xdomNode, FWrapperOwnerNode.WrapperDocument);
     end
     else
@@ -1754,45 +1747,12 @@ end;
 
 function Tox4DOMElement._AddRef: Integer;
 begin
-  {$ifdef _RefCountLog}
-  if IsConsole then OutputDebugString(PChar('-------------start Tox4DOMElement._AddRef'));
-  {$endif}
-
   Result := inherited _AddRef;
-  {$ifndef _NoDocRefCountOnElem}
-  if Assigned(NativeNode) and Assigned(NativeNode.RootDocument)
-    and (NativeNode = NativeNode.RootDocument.DocumentElement)
-    and Assigned(self.WrapperDocument) then
-    self.WrapperDocument._AddRef;
-  {$endif}
-
-  {$ifdef _RefCountLog}
-  if IsConsole then OutputDebugString(PChar('-------------end Tox4DOMElement._AddRef'));
-  {$endif}
 end;
 
 function Tox4DOMElement._Release: Integer;
 begin
-  {$ifdef _RefCountLog}
-  if IsConsole then OutputDebugString(PChar('-------------start Tox4DOMElement._Release'));
-  {$endif}
-
-  {$ifndef _ReleaseDependsFirst}
   Result := inherited _Release;
-  {$endif}
-  {$ifndef _NoDocRefCountOnElem}
-  if Assigned(NativeNode) and Assigned(NativeNode.RootDocument)
-    and (NativeNode = NativeNode.RootDocument.DocumentElement)
-    and Assigned(self.WrapperDocument) then
-    self.WrapperDocument._Release;
-  {$endif}
-  {$ifdef _ReleaseDependsFirst}
-  Result := inherited _Release;
-  {$endif}
-
-  {$ifdef _RefCountLog}
-  if IsConsole then OutputDebugString(PChar('-------------end Tox4DOMElement._Release'));
-  {$endif}
 end;
 
 procedure Tox4DOMElement.normalize;
@@ -2085,7 +2045,6 @@ end;
 
 function Tox4DOMDocument.get_documentElement: IDOMElement;
 begin
-  {$ifdef _NoDocElemFieldVar}
   if not Assigned(FDocumentElement) or
     (FNativeDocumentElement <> NativeDocument.documentElement) then { Test if underlying document NativeElement changed }
   begin
@@ -2093,12 +2052,6 @@ begin
     FDocumentElement := MakeNode(FNativeDocumentElement, Self) as IDOMElement;
   end;
   Result := FDocumentElement;
-  {$else}
-  if FNativeDocumentElement <> NativeDocument.documentElement then { Test if underlying document NativeElement changed }
-    FNativeDocumentElement := NativeDocument.documentElement;
-
-  Result := MakeNode(FNativeDocumentElement, Self) as IDOMElement;
-  {$endif}
 end;
 
 function Tox4DOMDocument.get_domImplementation: IDOMImplementation;
