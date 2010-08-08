@@ -3,7 +3,9 @@
  Author:    Tor Helland (reworked from Borland's 2.4 wrapper, which also had
             contributions from Keith Wood)
  Purpose:   IDom... interface wrapper for ADOM 4.3 (formerly OpenXML)
- History:   20100528 th A non-namespaced element as a child of an element with a
+ History:   20100808 th Various changes around RefCount, most notably no longer touching
+                        Tox4DomDocument's RefCount from Tox4DomElement._AddRef/_Release.
+            20100528 th A non-namespaced element as a child of an element with a
                         default namespace, now gets an empty xmlns attribute.
             20100525 cw Updates for compiling on Mac OSX.
             20100321 th Support for ADOM v4.3 and v5 renamed to exist
@@ -76,6 +78,7 @@
 {.$define UseADomV5_Custom} // Units prefixed with dk.
 {.$define UseADomV3_2_Custom} // Not tested.
 
+{.$define _RefCountLog} // Remove . to log _AddRef/_Release using OutputDebugString()
 unit gtcAdomxmldom;
 
 interface
@@ -739,16 +742,34 @@ begin
   Result := Tox4DOMNamedNodeMap.Create(NativeNamedNodeMap, WrapperDocument);
 end;
 
+procedure Log(sText: string);
+begin
+  OutputDebugString(PChar(sText));
+end;
+
 { Tox4DOMInterface }
 
 function Tox4DOMInterface._AddRef: Integer;
 begin
   Result := inherited _AddRef;
+  {$ifdef _RefCountLog}
+  Log(Format('%s._AddRef: %d (%x)', [self.ClassName, Result, Integer(self)]));
+  {$endif}
 end;
 
 function Tox4DOMInterface._Release: Integer;
+var
+  nSelf: Integer;
+  sClass: string;
 begin
+  {$ifdef _RefCountLog}
+  sClass := self.ClassName;
+  nSelf := Integer(self);
+  {$endif}
   Result := inherited _Release;
+  {$ifdef _RefCountLog}
+  Log(Format('%s._Release: %d (%x)', [sClass, Result, nSelf]));
+  {$endif}
 end;
 
 function Tox4DOMInterface.SafeCallException(ExceptObject: TObject;
@@ -1465,6 +1486,7 @@ end;
 
 function Tox4DOMNodeList.get_item(index: Integer): IDOMNode;
 var
+  xdomNode: TDomNode;
   xdomText: TDomText;
 begin
   if Assigned(NativeNodeList) then
@@ -1472,7 +1494,14 @@ begin
   else if Assigned(FNativeXpathNodeSet) then
   begin
     if FNativeXpathNodeSet.ResultType = XPATH_NODE_SET_TYPE then
-      Result := MakeNode(FNativeXpathNodeSet.item(index), FWrapperOwnerNode.WrapperDocument)
+    begin
+      xdomNode := FNativeXpathNodeSet.item(index);
+      if Assigned(FWrapperOwnerNode.WrapperDocument)
+        and (xdomNode = FWrapperOwnerNode.WrapperDocument.NativeDocument) then
+        Result := FWrapperOwnerNode.WrapperDocument // Xpath '/' case.
+      else
+        Result := MakeNode(xdomNode, FWrapperOwnerNode.WrapperDocument);
+    end
     else
     begin
       // Single value (number/boolean/string)
@@ -1760,19 +1789,11 @@ end;
 function Tox4DOMElement._AddRef: Integer;
 begin
   Result := inherited _AddRef;
-  if Assigned(NativeNode) and Assigned(NativeNode.RootDocument)
-    and (NativeNode = NativeNode.RootDocument.DocumentElement)
-    and Assigned(self.WrapperDocument) then
-    self.WrapperDocument._AddRef;
 end;
 
 function Tox4DOMElement._Release: Integer;
 begin
   Result := inherited _Release;
-  if Assigned(NativeNode) and Assigned(NativeNode.RootDocument)
-    and (NativeNode = NativeNode.RootDocument.DocumentElement)
-    and Assigned(self.WrapperDocument) then
-    self.WrapperDocument._Release;
 end;
 
 procedure Tox4DOMElement.normalize;
