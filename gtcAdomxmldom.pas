@@ -3,7 +3,11 @@
  Author:    Tor Helland (reworked from Borland's 2.4 wrapper, which also had
             contributions from Keith Wood)
  Purpose:   IDom... interface wrapper for ADOM 4.3 (formerly OpenXML)
- History:   20100525 cw Updates for compiling on Mac OSX.
+ History:   20100808 th Various changes around RefCount, most notably no longer touching
+                        Tox4DomDocument's RefCount from Tox4DomElement._AddRef/_Release.
+            20100528 th A non-namespaced element as a child of an element with a
+                        default namespace, now gets an empty xmlns attribute.
+            20100525 cw Updates for compiling on Mac OSX.
             20100321 th Support for ADOM v4.3 and v5 renamed to exist
                         alongside ADOM and adomxmldom bundled with Delphi 2010++.
             20090809 th Fixed some serious flaws in selectNode/selectNodes (now
@@ -74,7 +78,7 @@
 {.$define UseADomV5_Custom} // Units prefixed with dk.
 {.$define UseADomV3_2_Custom} // Not tested.
 
-{$define _RefCountLog}
+{.$define _RefCountLog} // Remove . to log _AddRef/_Release using OutputDebugString()
 unit gtcAdomxmldom;
 
 interface
@@ -737,21 +741,33 @@ begin
   Result := Tox4DOMNamedNodeMap.Create(NativeNamedNodeMap, WrapperDocument);
 end;
 
+procedure Log(sText: string);
+begin
+  OutputDebugString(PChar(sText));
+end;
+
 { Tox4DOMInterface }
 
 function Tox4DOMInterface._AddRef: Integer;
 begin
   Result := inherited _AddRef;
   {$ifdef _RefCountLog}
-  if IsConsole then OutputDebugString(PChar(Format('%s._AddRef: %d', [self.ClassName, Result])));
+  Log(Format('%s._AddRef: %d (%x)', [self.ClassName, Result, Integer(self)]));
   {$endif}
 end;
 
 function Tox4DOMInterface._Release: Integer;
+var
+  nSelf: Integer;
+  sClass: string;
 begin
+  {$ifdef _RefCountLog}
+  sClass := self.ClassName;
+  nSelf := Integer(self);
+  {$endif}
   Result := inherited _Release;
   {$ifdef _RefCountLog}
-  if IsConsole then OutputDebugString(PChar(Format('%s._Release: %d', [self.ClassName, Result])));
+  Log(Format('%s._Release: %d (%x)', [sClass, Result, nSelf]));
   {$endif}
 end;
 
