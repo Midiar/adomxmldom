@@ -595,12 +595,12 @@ implementation
 
 uses
   TypInfo,
-  SyncObjs,
-{$IFDEF POSIX}
-  IdHttp
+  SyncObjs
+{$IFDEF USE_INDY}
+  , IdHttp
 {$ENDIF}
 {$IFDEF MSWINDOWS}
-  Windows
+  , Windows
 {$ENDIF};
 
 type
@@ -744,7 +744,9 @@ end;
 
 procedure Log(sText: string);
 begin
+{$ifdef MSWINDOWS}
   OutputDebugString(PChar(sText));
+{$endif}
 end;
 
 { Tox4DOMInterface }
@@ -758,19 +760,21 @@ begin
 end;
 
 function Tox4DOMInterface._Release: Integer;
+{$ifdef _RefCountLog}
 var
   nSelf: Integer;
   sClass: string;
 begin
-  {$ifdef _RefCountLog}
   sClass := self.ClassName;
   nSelf := Integer(self);
-  {$endif}
   Result := inherited _Release;
-  {$ifdef _RefCountLog}
   Log(Format('%s._Release: %d (%x)', [sClass, Result, nSelf]));
-  {$endif}
 end;
+{$else}
+begin  
+  Result := inherited _Release;
+end;
+{$endif}
 
 function Tox4DOMInterface.SafeCallException(ExceptObject: TObject;
   ExceptAddr: Pointer): HRESULT;
@@ -2218,8 +2222,9 @@ begin
   end;
 end;
 
-{$IFDEF POSIX}
+{$IFNDEF MSWINDOWS}
 procedure LoadFromURL(URL: string; Stream: TStream);
+{$IFDEF USE_INDY}
 var
   IndyHTTP: TIDHttp;
 begin
@@ -2236,6 +2241,12 @@ begin
     IndyHTTP.Free;
   end;
 end;
+{$ELSE}
+begin
+  // TODO: Enable this through RTL helper somehow.
+  raise DOMException.Create('LoadFromURL not enable for non-windows platforms currently');
+end;
+{$ENDIF}
 {$ENDIF}
 
 {$IFDEF MSWINDOWS}
