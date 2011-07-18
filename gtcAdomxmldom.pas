@@ -219,7 +219,7 @@ type
     FXpathNodeListCopy: IDomNodeList;
   protected
     function AllocParser: TDomToXmlParser; // Must be freed by the calling routine.
-    procedure EnsureUndefXmlnsIfNeeded(xdnChild: TDomNode);
+    procedure CheckNamespaceDeclaration(xdnChild: TDomNode);
 
     { Iox4DOMNodeRef }
     function GetNativeNode: TdomNode;
@@ -492,6 +492,7 @@ type
     FWrapperDOMImpl: Tox4DOMImplementation;
     FDocIsOwned: Boolean;
     FParseError: TParseErrorInfo;
+    FDeclareNamespaces: Boolean;
     FPreserveWhitespace: Boolean;
     FDocumentElement: IDOMElement;
     FNativeDocumentElement: TdomElement;
@@ -568,6 +569,7 @@ type
       DocIsOwned: Boolean); reintroduce;
     destructor Destroy; override;
     property NativeDocument: TdomDocumentXpath read GetNativeDocument;
+    property DeclareNamespaces: Boolean read FDeclareNamespaces write FDeclareNamespaces;
     property PreserveWhitespace: Boolean read FPreserveWhitespace;
     property WrapperDOMImpl: Tox4DOMImplementation read FWrapperDOMImpl;
   end;
@@ -1154,7 +1156,7 @@ begin
     Result := newChild else
     Result := MakeNode(xdnReturnedChild, FWrapperDocument);
 
-  EnsureUndefXmlnsIfNeeded(xdnReturnedChild);
+  CheckNamespaceDeclaration(xdnReturnedChild);
 end;
 
 function Tox4DOMNode.cloneNode(deep: WordBool): IDOMNode;
@@ -1162,15 +1164,44 @@ begin
   Result := MakeNode(NativeNode.CloneNode(deep), FWrapperDocument);
 end;
 
-procedure Tox4DOMNode.EnsureUndefXmlnsIfNeeded(xdnChild: TDomNode);
-begin
-  if (xdnChild.NodeType = ntElement_Node) and (xdnChild.NamespaceURI = '')
-    and (NativeNode.LookupNamespaceURI('') <> '') then
+procedure Tox4DOMNode.CheckNamespaceDeclaration(xdnChild: TDomNode);
+
+  function LookupCurrentNS(const node: TDomNode): string;
   begin
-    // Add an empty xmlns attribute if not already there.
-    if not Assigned((xdnChild as TDomElement).GetAttributeNodeNS('http://www.w3.org/2000/xmlns/', 'xmlns')) then
-      (xdnChild as TDomElement).SetAttributeNS('http://www.w3.org/2000/xmlns/',
-         'xmlns', '');
+    if node.Prefix = '' then
+      Result := node.NamespaceURI
+    else if Assigned(node.ParentNode) then
+      Result := LookupCurrentNS(node.ParentNode)
+    else
+      Result := '';
+  end;
+
+var
+  CurrentNS: string;
+  ChildNS: string;
+  ChildPrefix: string;
+  NSAttrName: string;
+begin
+  if (xdnChild.NodeType = ntElement_Node) and (FWrapperDocument.DeclareNamespaces) then
+  begin
+    ChildNS := xdnChild.NamespaceURI;
+    ChildPrefix :=  xdnChild.Prefix;
+    CurrentNS := LookupCurrentNS(NativeNode);
+    // If the namespace of the child is different than what is current
+    // then add a namespace declaration.  If a prefix is specified
+    // make sure that it's been declared.
+    if (ChildNS <> CurrentNS) or (ChildPrefix <> '') then
+    begin
+      if ChildPrefix = '' then
+        NSAttrName := SXMLNS
+      else
+      begin
+        if NativeNode.LookupNamespaceURI(ChildPrefix) = '' then
+          NSAttrName := SXMLNS+NSDelim+ChildPrefix;
+      end;
+      if NSAttrName <> '' then
+        (xdnChild as TDomElement).SetAttributeNS(SXMLNamespaceURI, NSAttrName, ChildNS);
+    end;
   end;
 end;
 
@@ -1282,7 +1313,7 @@ begin
   Result := MakeNode(NativeNode.InsertBefore(xdnNewChild,
     GetNativeNodeOfIntfNode(refChild)), FWrapperDocument);
 
-  EnsureUndefXmlnsIfNeeded(xdnNewChild);
+  CheckNamespaceDeclaration(xdnNewChild);
 end;
 
 procedure Tox4DOMNode.normalize;
@@ -1303,7 +1334,7 @@ begin
   Result := MakeNode(NativeNode.ReplaceChild(xdnNewChild,
     GetNativeNodeOfIntfNode(oldChild)), FWrapperDocument);
 
-  EnsureUndefXmlnsIfNeeded(xdnNewChild);
+  CheckNamespaceDeclaration(xdnNewChild);
 end;
 
 procedure Tox4DOMNode.set_nodeValue(value: DOMString);
@@ -1998,6 +2029,7 @@ begin
   FDocIsOwned := DocIsOwned;
   FWrapperDOMImpl := AWrapperDOMImpl;
   FPreserveWhitespace := True;
+  FDeclareNamespaces := True;
   inherited Create(ANativeDoc, Self);
 end;
 
