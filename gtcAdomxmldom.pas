@@ -1181,26 +1181,50 @@ var
   ChildNS: string;
   ChildPrefix: string;
   NSAttrName: string;
+  PrefixedNS: string;
 begin
-  if (xdnChild.NodeType = ntElement_Node) and (FWrapperDocument.DeclareNamespaces) then
+  if FWrapperDocument.DeclareNamespaces then
   begin
-    ChildNS := xdnChild.NamespaceURI;
-    ChildPrefix :=  xdnChild.Prefix;
-    CurrentNS := LookupCurrentNS(NativeNode);
-    // If the namespace of the child is different than what is current
-    // then add a namespace declaration.  If a prefix is specified
-    // make sure that it's been declared.
-    if (ChildNS <> CurrentNS) or (ChildPrefix <> '') then
+    if xdnChild.NodeType = ntElement_Node then
     begin
-      if ChildPrefix = '' then
-        NSAttrName := SXMLNS
-      else
+      ChildNS := xdnChild.NamespaceURI;
+      ChildPrefix :=  xdnChild.Prefix;
+      CurrentNS := LookupCurrentNS(NativeNode);
+      // If the namespace of the child is different than what is current
+      // then add a namespace declaration.  If a prefix is specified
+      // make sure that it's been declared.
+      if (ChildNS <> CurrentNS) or (ChildPrefix <> '') then
       begin
-        if NativeNode.LookupNamespaceURI(ChildPrefix) = '' then
-          NSAttrName := SXMLNS+NSDelim+ChildPrefix;
+        if ChildPrefix = '' then
+          NSAttrName := SXMLNS
+        else
+        begin
+          if NativeNode.LookupNamespaceURI(ChildPrefix) = '' then
+            NSAttrName := SXMLNS+NSDelim+ChildPrefix;
+        end;
+        if NSAttrName <> '' then
+          (xdnChild as TDomElement).SetAttributeNS(SXMLNamespaceURI, NSAttrName, ChildNS);
       end;
-      if NSAttrName <> '' then
-        (xdnChild as TDomElement).SetAttributeNS(SXMLNamespaceURI, NSAttrName, ChildNS);
+    end
+
+    else if xdnChild.NodeType = ntAttribute_Node then
+    begin
+      ChildNS := xdnChild.NamespaceURI;
+      ChildPrefix :=  xdnChild.Prefix;
+      if ChildNS <> '' then
+      begin
+        if ChildPrefix = '' then
+          // Attributes cannot have default namespace.
+          raise ENamespace_Err.Create('Namespace error.');
+
+        PrefixedNS := xdnChild.LookupNamespaceURI(ChildPrefix);
+        if PrefixedNS <> ChildNS then
+        begin
+          // Namespace not defined, or must be redefined.
+          NSAttrName := SXMLNS+NSDelim+ChildPrefix;
+          (NativeNode as TDomElement).SetAttributeNS(SXMLNamespaceURI, NSAttrName, ChildNS);
+        end;
+      end;
     end;
   end;
 end;
@@ -1832,7 +1856,8 @@ begin
       Exit;
   end;
 
-  NativeElement.SetAttributeNS(namespaceURI, qualifiedName, value);
+  Attr := NativeElement.SetAttributeNS(namespaceURI, qualifiedName, value);
+  CheckNamespaceDeclaration(Attr);
 end;
 
 function Tox4DOMElement._AddRef: Integer;
