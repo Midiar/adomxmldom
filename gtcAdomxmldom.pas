@@ -1816,8 +1816,22 @@ end;
 
 procedure Tox4DOMElement.setAttributeNS(const namespaceURI, qualifiedName,
   value: DOMString);
+var
+  Attr: TDomAttr;
+  Prfx, Localname: WideString;
 begin
   CheckNamespaceAware;
+
+  if (namespaceURI = SXMLNamespaceURI)
+    and XmlExtractPrefixAndLocalName(qualifiedName, Prfx, LocalName) then
+  begin
+    Attr := NativeElement.GetAttributeNodeNS(namespaceURI, LocalName);
+    if Assigned(Attr)
+      and (Attr.Prefix = Prfx) and (Attr.LocalName = LocalName) and (Attr.value = value) then
+      // The exact same xmlns node already exists: Skip setting it.
+      Exit;
+  end;
+
   NativeElement.SetAttributeNS(namespaceURI, qualifiedName, value);
 end;
 
