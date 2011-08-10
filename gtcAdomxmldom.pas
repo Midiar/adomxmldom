@@ -3,7 +3,11 @@
  Author:    Tor Helland (reworked from Borland's 2.4 wrapper, which also had
             contributions from Keith Wood)
  Purpose:   IDom... interface wrapper for ADOM 4.3 (formerly OpenXML)
- History:   20100808 th Various changes around RefCount, most notably no longer touching
+ History:   20110810 me/th Missing namespace declaration when doNamespaceDecl is not set in
+                        TXMLDocument.Options, by Mark Edington.
+                        Also made to work in older Delphi versions.
+                        And also fixed similar problem with namespaced attributes.
+            20100808 th Various changes around RefCount, most notably no longer touching
                         Tox4DomDocument's RefCount from Tox4DomElement._AddRef/_Release.
             20100528 th A non-namespaced element as a child of an element with a
                         default namespace, now gets an empty xmlns attribute.
@@ -1177,11 +1181,11 @@ procedure Tox4DOMNode.CheckNamespaceDeclaration(xdnChild: TDomNode);
   end;
 
 var
-  CurrentNS: string;
-  ChildNS: string;
-  ChildPrefix: string;
-  NSAttrName: string;
-  PrefixedNS: string;
+  CurrentNS: DOMString;
+  ChildNS: DOMString;
+  ChildPrefix: DOMString;
+  NSAttrName: DOMString;
+  PrefixedNS: DOMString;
 begin
   if FWrapperDocument.DeclareNamespaces then
   begin

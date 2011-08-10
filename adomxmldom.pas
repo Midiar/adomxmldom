@@ -3,7 +3,11 @@
  Author:    Tor Helland (reworked from Borland's 2.4 wrapper, which also had
             contributions from Keith Wood)
  Purpose:   IDom... interface wrapper for ADOM 4.3 (formerly OpenXML)
- History:   20100808 th Various changes around RefCount, most notably no longer touching
+ History:   20110810 me/th Missing namespace declaration when doNamespaceDecl is not set in
+                        TXMLDocument.Options, by Mark Edington.
+                        Also made to work in older Delphi versions.
+                        And also fixed similar problem with namespaced attributes.
+            20100808 th Various changes around RefCount, most notably no longer touching
                         Tox4DomDocument's RefCount from Tox4DomElement._AddRef/_Release.
             20100528 th A non-namespaced element as a child of an element with a
                         default namespace, now gets an empty xmlns attribute.
@@ -1175,32 +1179,56 @@ procedure Tox4DOMNode.CheckNamespaceDeclaration(xdnChild: TDomNode);
     else
       Result := '';
   end;
-  
+
 var
-  CurrentNS: string;
-  ChildNS: string;
-  ChildPrefix: string;
-  NSAttrName: string;
+  CurrentNS: DOMString;
+  ChildNS: DOMString;
+  ChildPrefix: DOMString;
+  NSAttrName: DOMString;
+  PrefixedNS: DOMString;
 begin
-  if (xdnChild.NodeType = ntElement_Node) and (FWrapperDocument.DeclareNamespaces) then
+  if FWrapperDocument.DeclareNamespaces then
   begin
-    ChildNS := xdnChild.NamespaceURI;
-    ChildPrefix :=  xdnChild.Prefix;
-    CurrentNS := LookupCurrentNS(NativeNode);
-    // If the namespace of the child is different than what is current
-    // then add a namespace declaration.  If a prefix is specified
-    // make sure that it's been declared.
-    if (ChildNS <> CurrentNS) or (ChildPrefix <> '') then
+    if xdnChild.NodeType = ntElement_Node then
     begin
-      if ChildPrefix = '' then
-        NSAttrName := SXMLNS
-      else
+      ChildNS := xdnChild.NamespaceURI;
+      ChildPrefix :=  xdnChild.Prefix;
+      CurrentNS := LookupCurrentNS(NativeNode);
+      // If the namespace of the child is different than what is current
+      // then add a namespace declaration.  If a prefix is specified
+      // make sure that it's been declared.
+      if (ChildNS <> CurrentNS) or (ChildPrefix <> '') then
       begin
-        if NativeNode.LookupNamespaceURI(ChildPrefix) = '' then
-          NSAttrName := SXMLNS+NSDelim+ChildPrefix;
+        if ChildPrefix = '' then
+          NSAttrName := SXMLNS
+        else
+        begin
+          if NativeNode.LookupNamespaceURI(ChildPrefix) = '' then
+            NSAttrName := SXMLNS+NSDelim+ChildPrefix;
+        end;
+        if NSAttrName <> '' then
+          (xdnChild as TDomElement).SetAttributeNS(SXMLNamespaceURI, NSAttrName, ChildNS);
       end;
-      if NSAttrName <> '' then
-        (xdnChild as TDomElement).SetAttributeNS(SXMLNamespaceURI, NSAttrName, ChildNS);
+    end
+
+    else if xdnChild.NodeType = ntAttribute_Node then
+    begin
+      ChildNS := xdnChild.NamespaceURI;
+      ChildPrefix :=  xdnChild.Prefix;
+      if ChildNS <> '' then
+      begin
+        if ChildPrefix = '' then
+          // Attributes cannot have default namespace.
+          raise ENamespace_Err.Create('Namespace error.');
+
+        PrefixedNS := xdnChild.LookupNamespaceURI(ChildPrefix);
+        if PrefixedNS <> ChildNS then
+        begin
+          // Namespace not defined, or must be redefined.
+          NSAttrName := SXMLNS+NSDelim+ChildPrefix;
+          (NativeNode as TDomElement).SetAttributeNS(SXMLNamespaceURI, NSAttrName, ChildNS);
+        end;
+      end;
     end;
   end;
 end;
@@ -1816,9 +1844,24 @@ end;
 
 procedure Tox4DOMElement.setAttributeNS(const namespaceURI, qualifiedName,
   value: DOMString);
+var
+  Attr: TDomAttr;
+  Prfx, Localname: WideString;
 begin
   CheckNamespaceAware;
-  NativeElement.SetAttributeNS(namespaceURI, qualifiedName, value);
+
+  if (namespaceURI = SXMLNamespaceURI)
+    and XmlExtractPrefixAndLocalName(qualifiedName, Prfx, LocalName) then
+  begin
+    Attr := NativeElement.GetAttributeNodeNS(namespaceURI, LocalName);
+    if Assigned(Attr)
+      and (Attr.Prefix = Prfx) and (Attr.LocalName = LocalName) and (Attr.value = value) then
+      // The exact same xmlns node already exists: Skip setting it.
+      Exit;
+  end;
+
+  Attr := NativeElement.SetAttributeNS(namespaceURI, qualifiedName, value);
+  CheckNamespaceDeclaration(Attr);
 end;
 
 function Tox4DOMElement._AddRef: Integer;
