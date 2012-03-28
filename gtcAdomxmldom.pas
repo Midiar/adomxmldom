@@ -1850,17 +1850,20 @@ var
 begin
   CheckNamespaceAware;
 
-  if (namespaceURI = SXMLNamespaceURI)
-    and XmlExtractPrefixAndLocalName(qualifiedName, Prfx, LocalName) then
-  begin
+  Attr := nil;
+  if XmlExtractPrefixAndLocalName(qualifiedName, Prfx, LocalName) then
     Attr := NativeElement.GetAttributeNodeNS(namespaceURI, LocalName);
-    if Assigned(Attr)
-      and (Attr.Prefix = Prfx) and (Attr.LocalName = LocalName) and (Attr.value = value) then
+  if Assigned(Attr) and (namespaceURI = SXMLNamespaceURI) then
+  begin
+    if (Attr.Prefix = Prfx) and (Attr.LocalName = LocalName) and (Attr.value = value) then
       // The exact same xmlns node already exists: Skip setting it.
       Exit;
   end;
 
-  Attr := NativeElement.SetAttributeNS(namespaceURI, qualifiedName, value);
+  if Assigned(Attr) then
+    Attr.NodeValue := value
+  else
+    Attr := NativeElement.SetAttributeNS(namespaceURI, qualifiedName, value);
   CheckNamespaceDeclaration(Attr);
 end;
 
