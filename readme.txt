@@ -6,10 +6,7 @@ His source files are prefixed by dk, in order to allow us to compile and use
 his latest version of ADOM, while coexisting with the version supplied with
 Delphi 2010 onwards.
 
-adomxmldom.pas is intended to be equal to the source supplied in the RTL of
-Delphi 2010 onwards.
-It is identical to gtcAdomxmldom.pas, except for the unit name and the use of a
-conditional complation constant that identifies it as being the RTL version.
+adomxmldom.pas the file in Delphi 2010 RTL corresponding to gtcAdomxmldom.pas.
 
 
 In order to install and use gtcAdomxmldom in Delphi 2010, install the
