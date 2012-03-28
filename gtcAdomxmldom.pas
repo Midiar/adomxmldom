@@ -2104,6 +2104,7 @@ function Tox4DOMDocument.createCDATASection(const data: DOMString):
   IDOMCDATASection;
 begin
   Result := Tox4DOMCDATASection.Create(TdomCDATASection.Create(NativeDocument), self);
+  Result.data := data;
 end;
 
 function Tox4DOMDocument.createComment(const data: DOMString): IDOMComment;
