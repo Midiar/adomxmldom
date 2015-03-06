@@ -55,9 +55,9 @@ uses
 
 function selectNode(xnRoot: IXmlNode; const nodePath: WideString): IXmlNode;
 var
-  intfSelect        : IDomNodeSelect;
-  dnResult          : IDomNode;
-  intfDocAccess     : IXmlDocumentAccess;
+  intfSelect: IDomNodeSelect;
+  dnResult: IDomNode;
+  intfDocAccess: IXmlDocumentAccess;
   doc: TXmlDocument;
 begin
   Result := nil;
@@ -77,30 +77,29 @@ begin
 end;
 
 function selectNodes(xnRoot: IXmlNode; const nodePath: WideString): IXMLNodeList;
+resourcestring
+  rcErrSelectNodesNoRoot = 'Called selectNodes without specifying proper root.';
 var
-  intfSelect        : IDomNodeSelect;
-  intfAccess        : IXmlNodeAccess;
-  dnlResult         : IDomNodeList;
+  intfSelect: IDomNodeSelect;
+  intfAccess: IXmlNodeAccess;
+  dnlResult: IDomNodeList;
   intfDocAccess: IXmlDocumentAccess;
   doc: TXmlDocument;
-  i                 : Integer;
-  dn                : IDomNode;
+  i: Integer;
+  dn: IDomNode;
 begin
-  Result := nil;
+  // Always return a node list, even if empty.
   if not Assigned(xnRoot)
     or not Supports(xnRoot, IXmlNodeAccess, intfAccess)
     or not Supports(xnRoot.DOMNode, IDomNodeSelect, intfSelect) then
-    Exit;
+    XmlDocError(rcErrSelectNodesNoRoot);
+
+  // TXMLNodeList must have an owner (xnRoot).
+  Result := TXmlNodeList.Create(intfAccess.GetNodeObject, '', nil);
 
   dnlResult := intfSelect.selectNodes(nodePath);
   if Assigned(dnlResult) then
   begin
-    // todo We may be screwing up some RefCounts in all of this.
-
-    // TXMLNodeList must have an owner (xnRoot).
-    Result := TXmlNodeList.Create(intfAccess.GetNodeObject, '', nil);
-    //    Result := TgtcXMLNodeList.Create;
-
     if Supports(xnRoot.OwnerDocument, IXmlDocumentAccess, intfDocAccess) then
       doc := intfDocAccess.DocumentObject
     else
@@ -115,3 +114,4 @@ begin
 end;
 
 end.
+
