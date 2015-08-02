@@ -99,10 +99,10 @@ uses Classes,
   AdomCore_4_3,
   {$endif}
   {$ifdef UseADomV4_3_Custom}
-  dkAdomCore_4_3,
+  {$ifdef Ver210}dkAdomCore_4_3{$else}AdomCore_4_3{$endif},
   {$endif}
   {$ifdef UseADomV5_Custom}
-  dkAdomCore,
+  {$ifdef Ver210}dkAdomCore{$else}AdomCore{$endif},
   {$endif}
   {$ifdef UseADomV3_2_Custom}
   Xdom_3_2,
